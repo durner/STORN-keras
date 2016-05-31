@@ -1,5 +1,8 @@
 # ignore data
-data/
+data/anomal
+data/normal1
+data/normal2
+data/README.txt
 
 # Created by https://www.gitignore.io/api/python,pycharm,linux,windows,osx
 
