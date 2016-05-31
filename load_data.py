@@ -1,4 +1,5 @@
 import h5py
+from glob import glob
 import numpy as np
 
 
@@ -16,7 +17,6 @@ def load_data(dir):
     :return: X, a list of measured sequences
     """
 
-    from glob import glob
     path = dir + '/*.h5'
     files = glob(path)
     return [read_angle_measurements(path) for path in files]
