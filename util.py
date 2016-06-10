@@ -10,19 +10,15 @@ def get_logger(name):
 
 
 def subsample(sequence, step):
+    """
+    :param sequence: A sequence to be sub-sampled. The original sampling period must be at least 2*step.
+    :param step: The sub-sampling period.
+    :return: The sub-sampled result.
+    """
     result = []
-    max_error = 0
-
     prev = sequence[0, 0]
-    last_diff = np.inf
     for i, current_timestamp in enumerate(sequence[:, 0]):
-        current_diff = abs((prev + step) - current_timestamp)
-        if current_diff > last_diff:
-            result.append(sequence[i - 1, :])
-            prev = sequence[i - 1, 0]
-            if last_diff > max_error:
-                max_error = last_diff
-            last_diff = np.inf
-        else:
-            last_diff = current_diff
-    return np.asarray(result, dtype='float32'), max_error
+        if current_timestamp >= (prev + step):
+            result.append(sequence[i, :])
+            prev = current_timestamp
+    return np.asarray(result, dtype='float32')
