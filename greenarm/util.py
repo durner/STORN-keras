@@ -9,6 +9,16 @@ def get_logger(name):
     return logging.getLogger(name)
 
 
+def generate_x_y(data, predict_forward=1):
+    return data[:, :-predict_forward, :], data[:, predict_forward:, :]
+
+def add_samples_until_divisible(x, batch_size):
+    num_samples = x.shape[0]
+    sample_shape = x.shape[1:]
+    num_missing = batch_size * (num_samples // batch_size + 1) - num_samples
+    missing_shape = tuple([num_missing] + list(sample_shape))
+    return np.vstack([x, np.zeros(shape=missing_shape)])
+
 def subsample(sequence, step):
     """
     :param sequence: A sequence to be sub-sampled. The original sampling period must be at least 2*step.

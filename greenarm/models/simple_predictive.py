@@ -6,71 +6,87 @@ from keras.layers import TimeDistributed, Dense, Input, GRU, Masking
 from keras.models import Model
 from keras.regularizers import l1
 
-from greenarm.util import get_logger
+from greenarm.util import get_logger, add_samples_until_divisible
 
 logger = get_logger(__name__)
 
 
 class TimeSeriesPredictor(object):
-    def __init__(self, predict_batch_size=64):
-        self.model = None
+    def __init__(self):
+        self.train_model = None
         self.predict_model = None
         self.num_hidden_recurrent = 100
         self.num_hidden_dense = 100
         self._weights_updated = False
 
-    def build_model(self, maxlen):
-        input_layer = Input(shape=(maxlen, 7))
+    def _build_model(self, maxlen=None, batch_size=None, phase="train"):
+        if phase == "train":
+            assert maxlen is not None
+            input_layer = Input(shape=(maxlen, 7))
+        else:
+            assert batch_size is not None
+            input_layer = Input(batch_shape=(batch_size, 1, 7))
+
         masked = Masking()(input_layer)
-        recurrent = GRU(self.num_hidden_recurrent, return_sequences=True, dropout_W=0.2, dropout_U=0.2)(masked)
+
+        recurrent = GRU(
+            self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
+        )(masked)
+
         dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="tanh", W_regularizer=l1(0.01)))(recurrent)
         output = TimeDistributed(Dense(7))(dense1)
 
-        self.model = Model(input=input_layer, output=output)
-        self.model.compile(optimizer='rmsprop', loss='mean_squared_error')
+        model = Model(input=input_layer, output=output)
+        model.compile(optimizer='rmsprop', loss='mean_squared_error')
+        return model
 
-    def build_predict_model(self):
-        # TODO fix this
-        test_input_layer = Input(shape=(1, 7))
-        test_recurrent = GRU(
-            self.num_hidden_recurrent, stateful=True, batch_input_shape=(1, 1, 7),
-            return_sequences=False, dropout_W=0.2, dropout_U=0.2
-        )(test_input_layer)
-        test_dense1 = Dense(self.num_hidden_dense, activation="tanh", W_regularizer=l1(0.01))(test_recurrent)
-        test_output = Dense(7)(test_dense1)
+    def build_train_model(self, maxlen):
+        self.train_model = self._build_model(maxlen=maxlen, phase="train")
 
-        self.predict_model = Model(input=test_input_layer, output=test_output)
-        self.predict_model.compile(optimizer='rmsprop', loss='mean_squared_error')
+    def build_predict_model(self, batch_size):
+        self.predict_model = self._build_model(batch_size=batch_size, phase="predict")
 
     def load_predict_weights(self):
-        self.model.save_weights("tmp_weights.h5")
+        self.train_model.save_weights("tmp_weights.h5", overwrite=True)
         self.predict_model.load_weights("tmp_weights.h5")
         self._weights_updated = False
 
+    def reset_predict_model(self):
+        self.predict_model.reset_states()
+
     def fit(self, X, y, max_epochs=20, validation_split=0.1):
         seq_len = X.shape[1]
-        self.build_model(seq_len)
+        self.build_train_model(seq_len)
         split_idx = int((1. - validation_split) * X.shape[0])
         X, X_val = X[:split_idx], X[split_idx:]
         y, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_weights.h5", monitor='val_loss', save_best_only=True)
-        early_stop = EarlyStopping(monitor='val_loss')
+        checkpoint = ModelCheckpoint("best_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=3, verbose=1)
         try:
-            for epoch_no in range(max_epochs):
-                self.model.fit(X, y, nb_epoch=1, validation_data=(X_val, y_val), callbacks=[checkpoint, early_stop])
+            self.train_model.fit(
+                X, y, nb_epoch=max_epochs, validation_data=(X_val, y_val), callbacks=[checkpoint, early_stop]
+            )
 
         except KeyboardInterrupt:
-            logger.debug("Interrupted after %s epochs! Saving.." % epoch_no)
+            logger.debug("Trianing interrupted! Restoring best weights and saving..")
 
+        self.train_model.load_weights("best_weights.h5")
         self._weights_updated = True
         self.save()
 
     def predict_one_step(self, x):
+        original_num_samples = x.shape[0]
+        _batch_size = 32
+        x = add_samples_until_divisible(x, _batch_size)
+
+        if self.predict_model is None:
+            self.build_predict_model(_batch_size)
+
         if self._weights_updated:
             self.load_predict_weights()
 
-        return self.predict_model.predict(np.asarray(x))
+        return self.predict_model.predict(x, batch_size=_batch_size)[:original_num_samples, :, :]
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
@@ -82,7 +98,7 @@ class TimeSeriesPredictor(object):
         logger.debug("Saving model to %s" % prefix)
 
         with open(prefix + ".json", "w") as of:
-            of.write(self.model.to_json())
+            of.write(self.train_model.to_json())
 
-        self.model.save_weights(prefix + ".weights.h5")
+        self.train_model.save_weights(prefix + ".weights.h5")
         return prefix
