@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.layers import TimeDistributed, Dense, Input, GRU, Masking
+from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout
 from keras.models import Model
 from keras.regularizers import l1
 
@@ -15,8 +15,9 @@ class TimeSeriesPredictor(object):
     def __init__(self):
         self.train_model = None
         self.predict_model = None
-        self.num_hidden_recurrent = 100
-        self.num_hidden_dense = 100
+        self.num_hidden_recurrent = 128
+        self.num_hidden_dense = 128
+        self.embed_size = 32
         self._weights_updated = False
 
     def _build_model(self, maxlen=None, batch_size=None, phase="train"):
@@ -29,11 +30,16 @@ class TimeSeriesPredictor(object):
 
         masked = Masking()(input_layer)
 
+        embed = TimeDistributed(Dense(self.embed_size, activation="tanh"))(masked)
+        embed = Dropout(0.3)(embed)
+
         recurrent = GRU(
             self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
-        )(masked)
+        )(embed)
 
-        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="tanh", W_regularizer=l1(0.01)))(recurrent)
+        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="tanh"))(recurrent)
+        dense1 = Dropout(0.3)(dense1)
+
         output = TimeDistributed(Dense(7))(dense1)
 
         model = Model(input=input_layer, output=output)
