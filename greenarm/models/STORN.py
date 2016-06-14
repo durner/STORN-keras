@@ -5,7 +5,7 @@ import theano.tensor as tensor
 import theano
 import numpy
 from keras.layers import Input, Masking
-
+from keras.models import Model
 
 class STORNRecognitionModel:
     def __init__(self):
