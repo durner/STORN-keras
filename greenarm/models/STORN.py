@@ -4,30 +4,60 @@ Implementation of the STORN model from the paper.
 import theano.tensor as tensor
 import theano
 import numpy
-from keras.layers import Input, Masking
+from keras.engine import merge
 from keras.models import Model
+from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, Lambda
+from greenarm.models.loss.variational import keras_variational
+from greenarm.models.sampling.sampling import sample_gauss
+
 
 class STORNRecognitionModel:
     def __init__(self):
-        pass
+        self.sample_z = 0
+        self.rnn_recogn_stats = 0
+        self.input_layer = 0
 
-    def fit(self, X, train_seq):
+    def build(self, seq_shape, joint_shape):
+        self.input_layer = Input(shape=(seq_shape, joint_shape))
+        # input_layer = Input(batch_shape=(1, 1, joint_shape))
 
-        input_layer_train = Input(shape=(train_seq, 7))
-        input_layer = Input(batch_shape=(1, 1, 7))
+        embed1 = TimeDistributed(Dense(32, activation="tanh"))(self.input_layer)
+        embed1 = Dropout(0.3)(embed1)
+        rnn_recogn = GRU(128, return_sequences=True, dropout_W=0.2, dropout_U=0.2)(embed1)
+        self.rnn_recogn_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_recogn)
 
-        masked = Masking()(input_layer_train)
+        # sample z from the distribution in X
+        self.sample_z = TimeDistributed(Lambda(self.do_sample, output_shape=(joint_shape,)))(self.rnn_recogn_stats)
 
     def predict(self):
         pass
 
+    @staticmethod
+    def do_sample(statistics):
+        # split in half
+        dim = statistics.shape[-1] / 2
+        mu = statistics[:, :dim]
+        sigma = statistics[:, dim:]
+
+        # sample with this mean and variance
+        return sample_gauss(mu, sigma)
+
 
 class STORNGeneratingModel:
     def __init__(self):
-        pass
+        self.rnn_gen_stats = 0
 
-    def fit(self):
-        pass
+    def build(self, recognition_model, seq_shape, joint_shape):
+        input_layer = Input(shape=(seq_shape, joint_shape))
+        gen_input = merge(inputs=[input_layer, recognition_model.sample_z], mode='concat')
+        embed2 = TimeDistributed(Dense(32, activation="relu"), input_shape=(seq_shape, 2*joint_shape))(gen_input)
+        embed2 = Dropout(0.3)(embed2)
+        rnn_gen = GRU(128, return_sequences=True, dropout_W=0.2, dropout_U=0.2)(embed2)
+        self.rnn_gen_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_gen)
+
+        output = merge([self.rnn_gen_stats, recognition_model.rnn_recogn_stats], mode='concat')
+        model = Model(input=[recognition_model.input_layer, input_layer], output=output)
+        model.compile(optimizer='rmsprop', loss=keras_variational)
 
     def predict(self):
         pass
@@ -35,9 +65,6 @@ class STORNGeneratingModel:
 
 class STORNPriorModel:
     def __init__(self):
-        pass
-
-    def fit(self):
         pass
 
     def predict(self, z, t, k):
