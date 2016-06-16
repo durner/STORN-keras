@@ -1,17 +1,11 @@
 import numpy as np
-import theano.tensor as tensor
-import theano
-import numpy
-from keras.layers import Input, Masking, GRU, TimeDistributed, Dense, Dropout, Lambda, Merge, merge
+from keras.layers import Input, GRU, TimeDistributed, Dense, Dropout, Lambda, merge
 from keras.models import Model
-from keras import backend as K
 
 from greenarm.load_data import load_data
 from greenarm.util import subsample, generate_x_y, get_logger
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.models.loss.variational import keras_variational
-
-import theano
 
 ln = get_logger(__name__)
 
@@ -94,9 +88,19 @@ if __name__ == '__main__':
     """
     https: // github.com / fchollet / keras / blob / master / examples / variational_autoencoder.py
     """
-    maxlen = 672
-    # maxlen, train_x, train_y = get_data()
+    maxlen, train_x, train_y = get_data()
 
+    """
+    DEBUG
+    """
+    maxlen = 4
+    train_x = train_x[:, :3, :]
+    train_y = train_y[:, :3, :]
+    """
+    END DEBUG
+    """
+
+    maxlen -= 1
     input_x_t = Input(shape=(maxlen, 7))
     embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_x_t)
     embed1 = Dropout(0.3)(embed1)
@@ -120,3 +124,9 @@ if __name__ == '__main__':
     output = merge([rnn_gen_stats, rnn_recogn_stats], mode='concat')
     model = Model(input=[input_x_t, input_x_tm1], output=output)
     model.compile(optimizer='rmsprop', loss=keras_variational)
+
+    target = np.concatenate((train_y, np.zeros((train_y.shape[0],
+                                                train_y.shape[1],
+                                                3 * train_y.shape[2]))), axis=-1)
+    # print(model.predict([train_y[:2], train_x[:2]]))
+    # model.fit([train_y, train_x], [target], nb_epoch=5)

@@ -66,7 +66,8 @@ def keras_variational(x, output_statistics):
             mu and sigma, second half is the recognition model's mu and sigma.
     :return: the keras loss tensor
     """
-    dim = x.shape[-1]
+    dim = x.shape[-1]/4
+    x = x[:,:, :dim]
     expect_term = gauss(x, output_statistics[:, :, :dim], output_statistics[:, :, dim:2 * dim])
     kl_term = divergence(output_statistics[:, :, 2 * dim:3 * dim],
                          output_statistics[:, :, 3 * dim:])
