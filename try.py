@@ -1,5 +1,5 @@
 import numpy as np
-from keras.layers import Input, GRU, TimeDistributed, Dense, Dropout, Lambda, merge
+from keras.layers import Input, GRU, TimeDistributed, Dense, Dropout, Lambda, Masking, merge
 from keras.models import Model
 
 from greenarm.load_data import load_data
@@ -27,25 +27,19 @@ def get_data():
             maxlen = max([s.shape[0] for s in subsampled])
         else:
             maxlen = maxlen_
+        minlen = min([s.shape[0] for s in subsampled])
 
-        data = np.zeros(shape=(len(subsampled), maxlen, 7), dtype="float32")
+        data = np.zeros(shape=(len(subsampled), minlen, 7), dtype="float32")
 
         # zero padding needs to be done manually here, apparently
         for sample_index, sample in enumerate(subsampled):
-            if maxlen >= sample.shape[0]:
-                data[sample_index] = np.vstack((np.zeros((maxlen - sample.shape[0], 7)), sample[:, 1:]))
-            else:
-                data[sample_index] = sample[:maxlen, 1:]
+            data[sample_index] = sample[:minlen, 1:]
 
         x, y = generate_x_y(data, predict_forward=1)
 
-        if maxlen_ is None:
-            return (x, y), maxlen
-        else:
-            return x, y
+        return (x, y), minlen
 
     (x, y), maxlen = preprocess_dataset(normal)
-    a_x, a_y = preprocess_dataset(anormal, maxlen)
 
     train_x, test_x = x[0: int(x.shape[0] * 0.8)], x[int(x.shape[0] * 0.8):]
     train_y, test_y = y[0: int(y.shape[0] * 0.8)], y[int(y.shape[0] * 0.8):]
@@ -101,27 +95,40 @@ if __name__ == '__main__':
     """
 
     maxlen -= 1
+
+    # input x_t
     input_x_t = Input(shape=(maxlen, 7))
-    embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_x_t)
-    embed1 = Dropout(0.3)(embed1)
+    embed_x_t = TimeDistributed(Dense(32, activation="tanh"))(input_x_t)
+    embed_x_t = Dropout(0.3)(embed_x_t)
+
+    # recognition RNN
     rnn_recogn = GRU(
         128, return_sequences=True, dropout_W=0.2, dropout_U=0.2
-    )(embed1)
-    rnn_recogn_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_recogn)
+    )(embed_x_t)
+    rnn_recogn_mu = TimeDistributed(Dense(7, activation='linear'))(rnn_recogn)
+    rnn_recogn_sigma = TimeDistributed(Dense(7, activation="softplus"))(rnn_recogn)
 
-    # sample z from the distribution in X
+    # sample z|x
+    rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
     sample_z = TimeDistributed(Lambda(do_sample, output_shape=(7,)))(rnn_recogn_stats)
-    input_x_tm1 = Input(shape=(maxlen, 7))
 
-    gen_input = merge(inputs=[input_x_tm1, sample_z], mode='concat')
-    embed2 = TimeDistributed(Dense(32, activation="relu"), input_shape=(maxlen, 14))(gen_input)
-    embed2 = Dropout(0.3)(embed2)
+    # input x_tm1
+    input_x_tm1 = Input(shape=(maxlen, 7))
+    embed_x_tm1 = TimeDistributed(Dense(32, activation="tanh"))(input_x_tm1)
+    embed_x_tm1 = Dropout(0.3)(embed_x_tm1)
+
+    # generating RNN
+    gen_input = merge(inputs=[embed_x_tm1, sample_z], mode='concat')
     rnn_gen = GRU(
         128, return_sequences=True, dropout_W=0.2, dropout_U=0.2
-    )(embed2)
-    rnn_gen_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_gen)
+    )(gen_input)
+    rnn_gen_mu = TimeDistributed(Dense(7, activation="linear"))(rnn_gen)
+    rnn_gen_sigma = TimeDistributed(Dense(7, activation="softplus"))(rnn_gen)
 
-    output = merge([rnn_gen_stats, rnn_recogn_stats], mode='concat')
+    # output: x | z
+
+    output = merge([rnn_gen_mu, rnn_gen_sigma, rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
+
     model = Model(input=[input_x_t, input_x_tm1], output=output)
     model.compile(optimizer='rmsprop', loss=keras_variational)
 
@@ -129,4 +136,4 @@ if __name__ == '__main__':
                                                 train_y.shape[1],
                                                 3 * train_y.shape[2]))), axis=-1)
     # print(model.predict([train_y[:2], train_x[:2]]))
-    # model.fit([train_y, train_x], [target], nb_epoch=5)
+    model.fit([train_y, train_x], [target], nb_epoch=5)
