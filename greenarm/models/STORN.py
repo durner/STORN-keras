@@ -73,7 +73,6 @@ class STORNModel:
         X, X_val = X[:split_idx], X[split_idx:]
         y, y_val = y[:split_idx], y[split_idx:]
 
-        # todo @durner: make real validation
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
         early_stop = EarlyStopping(monitor='val_loss', patience=3, verbose=1)
         try:
@@ -91,6 +90,7 @@ class STORNModel:
         self._weights_updated = True
         self.save()
 
+    # todo @durner: thuink about predict method with the right input arguments for our network
     def predict_one_step(self, x):
         original_num_samples = x.shape[0]
         _batch_size = 1
