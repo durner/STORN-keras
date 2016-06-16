@@ -5,7 +5,7 @@ import numpy as np
 import theano.tensor as T
 
 
-def divergence(mu1, sigma1, mu2, sigma2):
+def divergence(mu1, sigma1):
     """
     Computes the KL divergence of p || q, where p is gaussian
     with (mu1, sigma1) and q is gaussian with (mu2, sigma2).
@@ -14,8 +14,6 @@ def divergence(mu1, sigma1, mu2, sigma2):
 
     :param mu1: a tensor for the first gaussian's mean
     :param sigma1: a tensor for the first gaussian's std. deviation
-    :param mu2: a tensor for the second gaussian's mean
-    :param sigma2: a tensor for the second gaussian's std. deviation
     :return: scalar for the KL divergence
     """
 
@@ -27,9 +25,8 @@ def divergence(mu1, sigma1, mu2, sigma2):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    term = T.mean(T.sum(T.log(sigma2) - T.log(sigma1) +
-                        0.5 * (sigma1 ** 2 + (mu1 - mu2) ** 2) /
-                        (sigma2 ** 2) - 1, axis=-1))
+    term = T.mean(T.sum(- T.log(sigma1) +
+                        0.5 * (sigma1 ** 2 + mu1 ** 2 - 1), axis=-1))
     return term
 
 
@@ -59,22 +56,21 @@ def gauss(x, mu, sigma):
     return nll
 
 
-def keras_gauss(x, output_statistics):
+def keras_variational(x, output_statistics):
     """
-    A wrapper around the gauss loss for keras.
+    A wrapper around the variational upper bound loss for keras.
 
     :param x: the x we want to compute the NLL for
-    :param output_statistics: the statistics of the distribution the model
-           outputs. mu is the first half, sigma the second half.
+    :param output_statistics: the statistics of the distributions for the
+            generating and recognition model. First half is the generating model's
+            mu and sigma, second half is the recognition model's mu and sigma.
     :return: the keras loss tensor
     """
     dim = x.shape[-1]
-    return gauss(x, output_statistics[:, :, :dim], output_statistics[:, :, dim:])
-
-
-def keras_divergence(prior_out, q_out):
-    dim = prior_out.shape[-1] / 2
-    return divergence(q_out[:, :, :dim], q_out[:, :, :dim], prior_out[:, :, :dim], prior_out[:, :, dim:])
+    expect_term = gauss(x, output_statistics[:, :, :dim], output_statistics[:, :, dim:2 * dim])
+    kl_term = divergence(output_statistics[:, :, 2 * dim:3 * dim],
+                         output_statistics[:, :, 3 * dim:])
+    return kl_term + expect_term
 
 
 def gauss_mixture():
