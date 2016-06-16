@@ -11,10 +11,12 @@ from greenarm.util import subsample, generate_x_y, get_logger
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.models.loss.variational import keras_variational
 
+import theano
+
 ln = get_logger(__name__)
 
-def get_data():
 
+def get_data():
     normal1 = load_data('data/normal1')
     normal2 = load_data('data/normal2')
 
@@ -58,6 +60,7 @@ def get_data():
     ln.debug("Shape of train_y {}".format(train_y.shape))
 
     return maxlen, train_x, train_y
+
 
 """
 TODO: recognition model
@@ -103,18 +106,17 @@ if __name__ == '__main__':
     rnn_recogn_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_recogn)
 
     # sample z from the distribution in X
-    sample_z = TimeDistributed(Lambda(do_sample, output_shape=(maxlen, 14)))(rnn_recogn_stats)
+    sample_z = TimeDistributed(Lambda(do_sample, output_shape=(7,)))(rnn_recogn_stats)
     input_x_tm1 = Input(shape=(maxlen, 7))
 
-    print("{} {}".format(sample_z.shape[-1], input_x_tm1.shape[-1]))
-    input_gen = K.concatenate([input_x_tm1, sample_z], axis=-1)
-    embed2 = TimeDistributed(Dense(32, activation="relu"), input_shape=(maxlen, 14))(input_gen)
+    gen_input = merge(inputs=[input_x_tm1, sample_z], mode='concat')
+    embed2 = TimeDistributed(Dense(32, activation="relu"), input_shape=(maxlen, 14))(gen_input)
     embed2 = Dropout(0.3)(embed2)
     rnn_gen = GRU(
         128, return_sequences=True, dropout_W=0.2, dropout_U=0.2
     )(embed2)
     rnn_gen_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_gen)
 
-    output = K.concatenate([rnn_gen_stats, rnn_recogn_stats], axis=-1)
+    output = merge([rnn_gen_stats, rnn_recogn_stats], mode='concat')
     model = Model(input=[input_x_t, input_x_tm1], output=output)
     model.compile(optimizer='rmsprop', loss=keras_variational)
