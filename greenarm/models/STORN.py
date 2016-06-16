@@ -4,71 +4,35 @@ Implementation of the STORN model from the paper.
 import theano.tensor as tensor
 import theano
 import numpy
+import time
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.engine import merge
 from keras.models import Model
 from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, Lambda
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.sampling.sampling import sample_gauss
+from greenarm.util import add_samples_until_divisible, get_logger
+
+logger = get_logger(__name__)
 
 
-class STORNRecognitionModel:
+class STORN:
     def __init__(self):
-        self.train_rnn_recogn_stats = 0
-        self.train_input = 0
-        self.train_z = 0
-        self.predict_rnn_recogn_stats = 0
-        self.preduct_input = 0
-        self.predict_z = 0
+        self.train_model = None
+        self.train_input = None
+        self.predict_model = None
+        self.predict_input = None
+        self.storn_rec = None
+        self._weights_updated = False
 
-    def _build(self, phase, seq_shape, joint_shape):
-        if phase == "train":
-            input_layer = Input(shape=(seq_shape, joint_shape))
-        else:
-            input_layer = Input(batch_shape=(1, 1, joint_shape))
-
-        embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_layer)
-        embed1 = Dropout(0.3)(embed1)
-        rnn_recogn = GRU(128, return_sequences=True, dropout_W=0.2, dropout_U=0.2)(embed1)
-        rnn_recogn_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_recogn)
-
-        # sample z from the distribution in X
-        sample_z = TimeDistributed(Lambda(self.do_sample, output_shape=(joint_shape,)))(rnn_recogn_stats)
-
-        return rnn_recogn_stats, input_layer, sample_z
-
-    def build(self, seq_shape, joint_shape):
-        self.train_rnn_recogn_stats, self. train_input, self.train_z = self._build("train", seq_shape, joint_shape)
-        self.predict_rnn_recogn_stats, self.preduct_input, self.predict_z = self._build("predict", seq_shape, joint_shape)
-
-    def predict(self):
-        pass
-
-    @staticmethod
-    def do_sample(statistics):
-        # split in half
-        dim = statistics.shape[-1] / 2
-        mu = statistics[:, :dim]
-        sigma = statistics[:, dim:]
-
-        # sample with this mean and variance
-        return sample_gauss(mu, sigma)
-
-
-class STORNGeneratingModel:
-    def __init__(self):
-        self.train_model = 0
-        self.train_input = 0
-        self.predict_model = 0
-        self.preduct_input = 0
-
-    def _build(self, phase, recognition_model, seq_shape, joint_shape):
+    def _build(self, phase, recognition_model, joint_shape, seq_shape=None, batch_size=None):
         if phase == "train":
             input_layer = Input(shape=(seq_shape, joint_shape))
             rec_z = recognition_model.train_z
             rec_input = recognition_model.train_input
             rec = recognition_model.train_rnn_recogn_stats
         else:
-            input_layer = Input(batch_shape=(1, 1, joint_shape))
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
             rec_z = recognition_model.predict_z
             rec_input = recognition_model.predict_input
             rec = recognition_model.predict_rnn_recogn_stats
@@ -85,12 +49,109 @@ class STORNGeneratingModel:
 
         return model, input_layer
 
-    def build(self, recognition_model, seq_shape, joint_shape):
-        self.train_model, self.train_input = self._build("train", recognition_model, seq_shape, joint_shape)
-        self.predict_model, self.preduct_input = self._build("predict", recognition_model, seq_shape, joint_shape)
+    def build(self, recognition_model, joint_shape, seq_shape=None, batch_size=None):
+        self.train_model, self.train_input = self._build("train", recognition_model, joint_shape, seq_shape)
+        self.predict_model, self.predict_input = self._build("predict", recognition_model, joint_shape, batch_size)
 
-    def predict(self):
-        pass
+    def load_predict_weights(self):
+        self.train_model.save_weights("storn_weights.h5", overwrite=True)
+        self.predict_model.load_weights("storn_weights.h5")
+        self._weights_updated = False
+
+    def reset_predict_model(self):
+        self.predict_model.reset_states()
+
+    def fit(self, X, y, max_epochs=20, validation_split=0.1):
+        seq_len = X.shape[1]
+        self.storn_rec = STORNRecognitionModel()
+        self.storn_rec.build(seq_len, 7)
+        self._build("train", self.storn_rec, 7, seq_shape=seq_len)
+
+        split_idx = int((1. - validation_split) * X.shape[0])
+        X, X_val = X[:split_idx], X[split_idx:]
+        y, y_val = y[:split_idx], y[split_idx:]
+
+        checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=3, verbose=1)
+        try:
+            self.train_model.fit(
+                X, y, nb_epoch=max_epochs, validation_data=(X_val, y_val), callbacks=[checkpoint, early_stop]
+            )
+
+        except KeyboardInterrupt:
+            logger.debug("Trianing interrupted! Restoring best weights and saving..")
+
+        self.train_model.load_weights("best_weights.h5")
+        self._weights_updated = True
+        self.save()
+
+    def predict(self, x):
+        original_num_samples = x.shape[0]
+        _batch_size = 32
+        x = add_samples_until_divisible(x, _batch_size)
+
+        if self.predict_model is None:
+            self._build("predict", self.storn_rec, 7, batch_size=_batch_size)
+
+        if self._weights_updated:
+            self.load_predict_weights()
+
+        return self.predict_model.predict(x, batch_size=_batch_size)[:original_num_samples, :, :]
+
+    def reset_predict_model_states(self):
+        self.predict_model.reset_states()
+
+    def save(self, prefix=None):
+        if prefix is None:
+            prefix = "saved_models/STORN_%s.model" % int(time.time())
+
+        logger.debug("Saving model to %s" % prefix)
+
+        with open(prefix + ".json", "w") as of:
+            of.write(self.train_model.to_json())
+
+        self.train_model.save_weights(prefix + ".weights.h5")
+        return prefix
+
+
+class STORNRecognitionModel:
+    def __init__(self):
+        self.train_rnn_recogn_stats = None
+        self.train_input = None
+        self.train_z = None
+        self.predict_rnn_recogn_stats = None
+        self.preduct_input = None
+        self.predict_z = None
+
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
+        if phase == "train":
+            input_layer = Input(shape=(seq_shape, joint_shape))
+        else:
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
+
+        embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_layer)
+        embed1 = Dropout(0.3)(embed1)
+        rnn_recogn = GRU(128, return_sequences=True, dropout_W=0.2, dropout_U=0.2)(embed1)
+        rnn_recogn_stats = TimeDistributed(Dense(14, activation="relu"))(rnn_recogn)
+
+        # sample z from the distribution in X
+        sample_z = TimeDistributed(Lambda(self.do_sample, output_shape=(joint_shape,)))(rnn_recogn_stats)
+
+        return rnn_recogn_stats, input_layer, sample_z
+
+    def build(self, joint_shape, seq_shape=None, batch_size=None):
+        self.train_rnn_recogn_stats, self. train_input, self.train_z = self._build("train", joint_shape, seq_shape)
+        self.predict_rnn_recogn_stats, self.preduct_input, self.predict_z = self._build("predict", joint_shape, batch_size)
+
+    @staticmethod
+    def do_sample(statistics):
+        # split in half
+        dim = statistics.shape[-1] / 2
+        mu = statistics[:, :dim]
+        sigma = statistics[:, dim:]
+
+        # sample with this mean and variance
+        return sample_gauss(mu, sigma)
 
 
 class STORNPriorModel:
