@@ -1,17 +1,9 @@
-import numpy as np
-from theano.sandbox.rng_mrg import MRG_RandomStreams
-
-seed_rng = np.random.RandomState(np.random.randint(1024))
-max_int = np.iinfo(np.int32).max
-seed = seed_rng.randint(max_int)
-theano_rng = MRG_RandomStreams(seed)
+import keras.backend as K
 
 
-def sample_gauss(mu, sig):
-    # put the sample as the mid dimension
-    epsilon = theano_rng.normal(size=(mu.shape[0],
-                                      mu.shape[1]),
-                                avg=0., std=1.,
-                                dtype=mu.dtype)
+def sample_gauss(mu, sig, batch_size, dim_size):
+    epsilon = K.random_normal(shape=(batch_size,
+                                     dim_size),
+                              mean=0., std=0.01)
     sample = mu + sig * epsilon
     return sample

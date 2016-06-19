@@ -94,6 +94,16 @@ class TimeSeriesPredictor(object):
 
         return self.predict_model.predict(x, batch_size=_batch_size)[:original_num_samples, :, :]
 
+    def evaluate(self, inputs):
+        """
+        :param inputs: a list of inputs for the model. In this case, it's a
+                       one element list.
+        :return: plotting artifacts: input, prediction, and error matrices
+        """
+        x = inputs[-1]
+        pred = self.predict_one_step(x)
+        return x, pred, (x-pred)**2
+
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
 

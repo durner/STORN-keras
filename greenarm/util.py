@@ -10,7 +10,7 @@ def get_logger(name):
     return logging.getLogger(name)
 
 
-def generate_x_y(data, predict_forward=1, shuffle=True):
+def generate_shifted(data, predict_forward=1, shuffle=True):
     if shuffle:
         idxs = range(data.shape[0])
         random.shuffle(idxs)
