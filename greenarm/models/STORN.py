@@ -39,23 +39,33 @@ class STORNModel:
         self.storn_rec.build(joint_shape, phase=phase,
                              seq_shape=seq_shape, batch_size=batch_size)
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape))
+            input_layer = Input(shape=(seq_shape, joint_shape), dtype="float32")
             rec_z = self.storn_rec.train_z
             rec_input = self.storn_rec.train_input
             rec = self.storn_rec.train_rnn_recogn_stats
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), dtype="float32")
             rec_z = self.storn_rec.predict_z
             rec_input = self.storn_rec.predict_input
             rec = self.storn_rec.predict_rnn_recogn_stats
 
         gen_input = merge(inputs=[input_layer, rec_z], mode='concat')
-        embed2 = TimeDistributed(Dense(32, activation="relu"))(gen_input)
-        embed2 = Dropout(0.3)(embed2)
-        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(embed2)
+        embed1 = TimeDistributed(Dense(50, activation="relu"))(gen_input)
+        embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
+        embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
+        embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
+        embed4 = Dropout(0.3)(embed4)
 
-        rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(rnn_gen)
-        rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_gen)
+        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(
+            embed4)
+
+        gen_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_gen)
+        gen_map2 = TimeDistributed(Dense(50, activation="relu"))(gen_map1)
+        gen_map3 = TimeDistributed(Dense(50, activation="relu"))(gen_map2)
+        gen_map4 = TimeDistributed(Dense(50, activation="relu"))(gen_map3)
+
+        rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map4)
+        rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map4)
 
         output = merge([rnn_gen_mu, rnn_gen_sigma, rec], mode='concat')
         model = Model(input=[rec_input, input_layer], output=output)
@@ -151,16 +161,23 @@ class STORNRecognitionModel:
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape))
+            input_layer = Input(shape=(seq_shape, joint_shape), dtype="float32")
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), dtype="float32")
 
-        embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_layer)
-        embed1 = Dropout(0.3)(embed1)
+        embed1 = TimeDistributed(Dense(50, activation="relu"))(input_layer)
+        embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
+        embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
+        embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
+        embed4 = Dropout(0.3)(embed4)
         rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(
-            embed1)
-        rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(rnn_recogn)
-        rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_recogn)
+            embed4)
+        recogn_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_recogn)
+        recogn_map2 = TimeDistributed(Dense(50, activation="relu"))(recogn_map1)
+        recogn_map3 = TimeDistributed(Dense(50, activation="relu"))(recogn_map2)
+        recogn_map4 = TimeDistributed(Dense(50, activation="relu"))(recogn_map3)
+        rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(recogn_map4)
+        rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(recogn_map4)
 
         # sample z|
         rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
