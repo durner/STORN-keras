@@ -119,7 +119,7 @@ class STORNModel:
         """
         x = inputs[0]
         pred = self.predict_one_step(inputs)[:, :, :7]
-        return inputs[0], pred, (x - pred) ** 2
+        return pred, (x - pred) ** 2
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()

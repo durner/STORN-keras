@@ -102,7 +102,7 @@ class TimeSeriesPredictor(object):
         """
         x = inputs[-1]
         pred = self.predict_one_step(x)
-        return x, pred, (x-pred)**2
+        return pred, (x-pred)**2
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
