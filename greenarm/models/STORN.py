@@ -38,7 +38,7 @@ class STORNModel:
         self.storn_rec = STORNRecognitionModel()
         self.storn_rec.build(joint_shape, phase=phase,
                              seq_shape=seq_shape, batch_size=batch_size)
-        if phase is Phases.train:
+        if phase == Phases.train:
             input_layer = Input(shape=(seq_shape, joint_shape))
             rec_z = self.storn_rec.train_z
             rec_input = self.storn_rec.train_input
@@ -52,7 +52,7 @@ class STORNModel:
         gen_input = merge(inputs=[input_layer, rec_z], mode='concat')
         embed2 = TimeDistributed(Dense(32, activation="relu"))(gen_input)
         embed2 = Dropout(0.3)(embed2)
-        rnn_gen = GRU(128, return_sequences=True, stateful=(phase is Phases.predict), dropout_W=0.2, dropout_U=0.2)(embed2)
+        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(embed2)
 
         rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(rnn_gen)
         rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_gen)
@@ -150,14 +150,14 @@ class STORNRecognitionModel:
         self.predict_z = None
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
-        if phase is Phases.train:
+        if phase == Phases.train:
             input_layer = Input(shape=(seq_shape, joint_shape))
         else:
             input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
 
         embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_layer)
         embed1 = Dropout(0.3)(embed1)
-        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase is Phases.predict), dropout_W=0.2, dropout_U=0.2)(
+        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(
             embed1)
         rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(rnn_recogn)
         rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_recogn)
@@ -168,13 +168,13 @@ class STORNRecognitionModel:
         # sample z from the distribution in X
         sample_z = TimeDistributed(Lambda(self.do_sample,
                                           output_shape=self.sample_output_shape,
-                                          arguments={'batch_size': (None if (phase is Phases.train) else batch_size),
+                                          arguments={'batch_size': (None if (phase == Phases.train) else batch_size),
                                                      'dim_size': joint_shape}))(rnn_recogn_stats)
 
         return rnn_recogn_stats, input_layer, sample_z
 
     def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
-        if phase is Phases.train:
+        if phase == Phases.train:
             self.train_rnn_recogn_stats, self.train_input, self.train_z = self._build(Phases.train, joint_shape,
                                                                                       seq_shape=seq_shape)
         else:
