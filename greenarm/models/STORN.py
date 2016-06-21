@@ -16,6 +16,15 @@ from greenarm.util import add_samples_until_divisible, get_logger
 logger = get_logger(__name__)
 
 
+# enum for different phases
+class Phases:
+    def __init__(self):
+        pass
+
+    predict = 1
+    train = 2
+
+
 class STORNModel:
     def __init__(self):
         self.train_model = None
@@ -29,7 +38,7 @@ class STORNModel:
         self.storn_rec = STORNRecognitionModel()
         self.storn_rec.build(joint_shape, phase=phase,
                              seq_shape=seq_shape, batch_size=batch_size)
-        if phase == "train":
+        if phase is Phases.train:
             input_layer = Input(shape=(seq_shape, joint_shape))
             rec_z = self.storn_rec.train_z
             rec_input = self.storn_rec.train_input
@@ -43,7 +52,7 @@ class STORNModel:
         gen_input = merge(inputs=[input_layer, rec_z], mode='concat')
         embed2 = TimeDistributed(Dense(32, activation="relu"))(gen_input)
         embed2 = Dropout(0.3)(embed2)
-        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == "predict"), dropout_W=0.2, dropout_U=0.2)(embed2)
+        rnn_gen = GRU(128, return_sequences=True, stateful=(phase is Phases.predict), dropout_W=0.2, dropout_U=0.2)(embed2)
 
         rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(rnn_gen)
         rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_gen)
@@ -55,8 +64,8 @@ class STORNModel:
         return model, input_layer
 
     def build(self, joint_shape, seq_shape=None, batch_size=None):
-        self.train_model, self.train_input = self._build("train", joint_shape, seq_shape=seq_shape)
-        self.predict_model, self.predict_input = self._build("predict", joint_shape, batch_size=batch_size)
+        self.train_model, self.train_input = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
+        self.predict_model, self.predict_input = self._build(Phases.predict, joint_shape, batch_size=batch_size)
 
     def load_predict_weights(self):
         # self.train_model.save_weights("storn_weights.h5", overwrite=True)
@@ -68,7 +77,7 @@ class STORNModel:
 
     def fit(self, inputs, target, max_epochs=2, validation_split=0.2):
         seq_len = inputs[0].shape[1]
-        self.train_model, self.train_input = self._build("train", 7, seq_shape=seq_len)
+        self.train_model, self.train_input = self._build(Phases.train, 7, seq_shape=seq_len)
 
         split_idx = int((1. - validation_split) * inputs[0].shape[0])
 
@@ -99,14 +108,13 @@ class STORNModel:
         self._weights_updated = True
         self.save()
 
-    # todo @durner: thuink about predict method with the right input arguments for our network
     def predict_one_step(self, inputs):
         original_num_samples = inputs[0].shape[0]
         _batch_size = 32
         inputs = [add_samples_until_divisible(input_x, _batch_size) for input_x in inputs]
 
         if self.predict_model is None:
-            self.predict_model, self.predict_input = self._build("predict", joint_shape=7, batch_size=_batch_size)
+            self.predict_model, self.predict_input = self._build(Phases.predict, joint_shape=7, batch_size=_batch_size)
             self.load_predict_weights()
 
         return self.predict_model.predict(inputs, batch_size=_batch_size)[:original_num_samples, :, :]
@@ -128,13 +136,6 @@ class STORNModel:
         if prefix is None:
             prefix = "saved_models/STORN_%s.model" % int(time.time())
 
-        # try:
-        #     logger.debug("Saving model to %s" % prefix)
-        #     with open(prefix + ".json", "w") as of:
-        #         of.write(self.train_model.to_json())
-        # except:
-        #     logger.error("Couldn't save model to file " % prefix)
-
         self.train_model.save_weights(prefix + ".weights.h5", overwrite=True)
         return prefix
 
@@ -149,35 +150,35 @@ class STORNRecognitionModel:
         self.predict_z = None
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
-        if phase == "train":
+        if phase is Phases.train:
             input_layer = Input(shape=(seq_shape, joint_shape))
         else:
             input_layer = Input(batch_shape=(batch_size, 1, joint_shape))
 
         embed1 = TimeDistributed(Dense(32, activation="tanh"))(input_layer)
         embed1 = Dropout(0.3)(embed1)
-        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == "predict"), dropout_W=0.2, dropout_U=0.2)(
+        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase is Phases.predict), dropout_W=0.2, dropout_U=0.2)(
             embed1)
         rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(rnn_recogn)
         rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(rnn_recogn)
 
-        # sample z|x
+        # sample z|
         rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
 
         # sample z from the distribution in X
         sample_z = TimeDistributed(Lambda(self.do_sample,
                                           output_shape=self.sample_output_shape,
-                                          arguments={'batch_size': (None if (phase == 'train') else batch_size),
+                                          arguments={'batch_size': (None if (phase is Phases.train) else batch_size),
                                                      'dim_size': joint_shape}))(rnn_recogn_stats)
 
         return rnn_recogn_stats, input_layer, sample_z
 
-    def build(self, joint_shape, phase="train", seq_shape=None, batch_size=None):
-        if phase == "train":
-            self.train_rnn_recogn_stats, self.train_input, self.train_z = self._build("train", joint_shape,
+    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
+        if phase is Phases.train:
+            self.train_rnn_recogn_stats, self.train_input, self.train_z = self._build(Phases.train, joint_shape,
                                                                                       seq_shape=seq_shape)
         else:
-            self.predict_rnn_recogn_stats, self.predict_input, self.predict_z = self._build("predict", joint_shape,
+            self.predict_rnn_recogn_stats, self.predict_input, self.predict_z = self._build(Phases.predict, joint_shape,
                                                                                             batch_size=batch_size)
 
     @staticmethod
