@@ -5,7 +5,7 @@ import numpy as np
 import theano.tensor as T
 
 
-def divergence(mu1, sigma1):
+def divergence(mu1, sigma1, mu2=0, sigma2=1):
     """
     Computes the KL divergence of p || q, where p is gaussian
     with (mu1, sigma1) and q is gaussian with (mu2, sigma2).
@@ -14,6 +14,8 @@ def divergence(mu1, sigma1):
 
     :param mu1: a tensor for the first gaussian's mean
     :param sigma1: a tensor for the first gaussian's std. deviation
+    :param mu2: a tensor for the second gaussian's mean
+    :param sigma2: a tensor for the second gaussian's std. deviation
     :return: scalar for the KL divergence
     """
 
@@ -25,8 +27,8 @@ def divergence(mu1, sigma1):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    term = T.mean(T.sum(- T.log(sigma1) +
-                        0.5 * (sigma1 ** 2 + mu1 ** 2 - 1), axis=-1))
+    term = T.mean(T.sum(T.log(sigma2 / sigma1) +
+                        ((sigma1 ** 2 + (mu1 - mu2) ** 2) / (2 * sigma2 ** 2)) - 0.5, axis=-1))
     return term
 
 
@@ -62,12 +64,13 @@ def keras_variational(x, output_statistics):
 
     :param x: the x we want to compute the NLL for
     :param output_statistics: the statistics of the distributions for the
-            generating and recognition model. First half is the generating model's
-            mu and sigma, second half is the recognition model's mu and sigma.
+            generating and recognition model. First third is the generating model's
+            mu and sigma, second third is the recognition model's mu and sigma.
+            The last third represents the mu and sigma of the trending prior.
     :return: the keras loss tensor
     """
     dim = x.shape[-1]/4
-    x = x[:,:, :dim]
+    x = x[:, :, :dim]
     expect_term = gauss(x, output_statistics[:, :, :dim], output_statistics[:, :, dim:2 * dim])
     kl_term = divergence(output_statistics[:, :, 2 * dim:3 * dim],
                          output_statistics[:, :, 3 * dim:])
