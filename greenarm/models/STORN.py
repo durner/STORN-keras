@@ -8,7 +8,7 @@ import time
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.engine import merge
 from keras.models import Model
-from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, Lambda
+from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lambda
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
@@ -62,18 +62,22 @@ class STORNModel:
         embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
         embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
         embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
-        embed4 = Dropout(0.3)(embed4)
+        embed5 = TimeDistributed(Dense(50, activation="relu"))(embed4)
+        embed6 = TimeDistributed(Dense(50, activation="relu"))(embed5)
+        # embed4 = Dropout(0.3)(embed4)
 
-        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(
-            embed4)
+        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), consume_less='gpu')(
+            embed6)
 
         gen_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_gen)
         gen_map2 = TimeDistributed(Dense(50, activation="relu"))(gen_map1)
         gen_map3 = TimeDistributed(Dense(50, activation="relu"))(gen_map2)
         gen_map4 = TimeDistributed(Dense(50, activation="relu"))(gen_map3)
+        gen_map5 = TimeDistributed(Dense(50, activation="relu"))(gen_map4)
+        gen_map6 = TimeDistributed(Dense(50, activation="relu"))(gen_map5)
 
-        rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map4)
-        rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map4)
+        rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map6)
+        rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map6)
 
         output = merge([rnn_gen_mu, rnn_gen_sigma, rec, prior], mode='concat')
         model = Model(input=[rec_input, input_layer, prior_input], output=output)
@@ -93,7 +97,7 @@ class STORNModel:
     def reset_predict_model(self):
         self.predict_model.reset_states()
 
-    def fit(self, inputs, target, max_epochs=2, validation_split=0.2):
+    def fit(self, inputs, target, max_epochs=2, validation_split=0.1):
         list_in = inputs[:]
         list_in.append(STORNStandardPriorModel.standard_input(inputs[0].shape[0], inputs[0].shape[1],
                                                               inputs[0].shape[2]))
@@ -107,7 +111,7 @@ class STORNModel:
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=3, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
         try:
             # A workaround so that kears does not complain
             padded_target = numpy.concatenate((train_target, numpy.zeros((train_target.shape[0],
@@ -185,15 +189,19 @@ class STORNRecognitionModel:
         embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
         embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
         embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
-        embed4 = Dropout(0.3)(embed4)
-        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), dropout_W=0.2, dropout_U=0.2)(
-            embed4)
+        embed5 = TimeDistributed(Dense(50, activation="relu"))(embed4)
+        embed6 = TimeDistributed(Dense(50, activation="relu"))(embed5)
+        # embed4 = Dropout(0.3)(embed4)
+        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), consume_less='gpu')(
+            embed6)
         recogn_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_recogn)
         recogn_map2 = TimeDistributed(Dense(50, activation="relu"))(recogn_map1)
         recogn_map3 = TimeDistributed(Dense(50, activation="relu"))(recogn_map2)
         recogn_map4 = TimeDistributed(Dense(50, activation="relu"))(recogn_map3)
-        rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(recogn_map4)
-        rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(recogn_map4)
+        recogn_map5 = TimeDistributed(Dense(50, activation="relu"))(recogn_map4)
+        recogn_map6 = TimeDistributed(Dense(50, activation="relu"))(recogn_map5)
+        rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(recogn_map6)
+        rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(recogn_map6)
 
         # sample z|
         rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
