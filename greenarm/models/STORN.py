@@ -94,7 +94,7 @@ class STORNModel:
         self.predict_model.reset_states()
 
     def fit(self, inputs, target, max_epochs=2, validation_split=0.2):
-        list_in = inputs
+        list_in = inputs[:]
         list_in.append(STORNStandardPriorModel.standard_input(inputs[0].shape[0], inputs[0].shape[1],
                                                               inputs[0].shape[2]))
 
@@ -131,7 +131,7 @@ class STORNModel:
         self.save()
 
     def predict_one_step(self, inputs):
-        list_in = inputs
+        list_in = inputs[:]
         list_in.append(STORNStandardPriorModel.standard_input(inputs[0].shape[0], inputs[0].shape[1],
                                                               inputs[0].shape[2]))
 
