@@ -69,11 +69,14 @@ def keras_variational(x, output_statistics):
             The last third represents the mu and sigma of the trending prior.
     :return: the keras loss tensor
     """
-    dim = x.shape[-1]/4
+    dim = x.shape[-1]/6
     x = x[:, :, :dim]
     expect_term = gauss(x, output_statistics[:, :, :dim], output_statistics[:, :, dim:2 * dim])
     kl_term = divergence(output_statistics[:, :, 2 * dim:3 * dim],
-                         output_statistics[:, :, 3 * dim:])
+                         output_statistics[:, :, 3 * dim:4 * dim],
+                         output_statistics[:, :, 4 * dim:5 * dim],
+                         output_statistics[:, :, 5 * dim:],
+                         )
     return kl_term + expect_term
 
 
