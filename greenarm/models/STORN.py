@@ -43,14 +43,14 @@ class STORNModel:
         self.storn_rec.build(joint_shape, phase=phase,  seq_shape=seq_shape, batch_size=batch_size)
 
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape), dtype="float32")
+            input_layer = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
             rec_z = self.storn_rec.train_z
             rec_input = self.storn_rec.train_input
             rec = self.storn_rec.train_rnn_recogn_stats
             prior = self.storn_trending_prior.train_trending
             prior_input = self.storn_trending_prior.train_input
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), dtype="float32")
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), name="storn_input_predict", dtype="float32")
             rec_z = self.storn_rec.predict_z
             rec_input = self.storn_rec.predict_input
             rec = self.storn_rec.predict_rnn_recogn_stats
@@ -181,9 +181,9 @@ class STORNRecognitionModel:
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape), dtype="float32")
+            input_layer = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), dtype="float32")
+            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
 
         embed1 = TimeDistributed(Dense(50, activation="relu"))(input_layer)
         embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
@@ -250,9 +250,9 @@ class STORNStandardPriorModel:
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, 2 * joint_shape), dtype="float32")
+            input_layer = Input(shape=(seq_shape, 2 * joint_shape), name="storn_prior_input_train", dtype="float32")
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, 2 * joint_shape), dtype="float32")
+            input_layer = Input(batch_shape=(batch_size, 1, 2 * joint_shape), name="storn_prior_input_predict", dtype="float32")
 
         return input_layer, input_layer
 
