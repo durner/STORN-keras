@@ -2,7 +2,7 @@
 TODO: define the log likelihood upper bound for variational bayes in here
 """
 import numpy as np
-import theano.tensor as T
+import keras.backend as K
 
 
 def divergence(mu1, sigma1, mu2=0, sigma2=1):
@@ -27,8 +27,8 @@ def divergence(mu1, sigma1, mu2=0, sigma2=1):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    term = T.mean(T.sum(T.log(sigma2 / sigma1) +
-                        ((sigma1 ** 2 + (mu1 - mu2) ** 2) / (2 * sigma2 ** 2)) - 0.5, axis=-1))
+    term = K.sum(K.log(sigma2 / sigma1) +
+                 ((K.square(sigma1) + K.square(mu1 - mu2)) / (2 * K.square(sigma2))) - 0.5, axis=-1)
     return term
 
 
@@ -53,8 +53,8 @@ def gauss(x, mu, sigma):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    nll = T.mean(0.5 * T.sum(T.sqr(x - mu) / sigma ** 2 + 2 * T.log(sigma) +
-                             T.log(2 * np.pi), axis=-1))
+    nll = 0.5 * K.sum(K.square(x - mu) / K.square(sigma) + 2 * K.log(sigma) +
+                      K.log(2 * np.pi), axis=-1)
     return nll
 
 

@@ -30,17 +30,28 @@ class TimeSeriesPredictor(object):
 
         masked = Masking()(input_layer)
 
-        embed = TimeDistributed(Dense(self.embed_size, activation="tanh"))(masked)
-        embed = Dropout(0.3)(embed)
+        embed1 = TimeDistributed(Dense(self.embed_size, activation="relu"))(masked)
+        embed2 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed1)
+        embed3 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed2)
+        embed4 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed3)
+        embed5 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed4)
+        embed6 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed5)
+        # embed = Dropout(0.3)(embed)
 
         recurrent = GRU(
             self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
-        )(embed)
+        )(embed6)
 
-        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="tanh"))(recurrent)
-        dense1 = Dropout(0.3)(dense1)
+        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(recurrent)
+        dense2 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense1)
+        dense3 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense2)
+        dense4 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense3)
+        dense5 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense4)
+        dense6 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense5)
 
-        output = TimeDistributed(Dense(7))(dense1)
+        # dense1 = Dropout(0.3)(dense1)
+
+        output = TimeDistributed(Dense(7))(dense6)
 
         model = Model(input=input_layer, output=output)
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
@@ -68,7 +79,7 @@ class TimeSeriesPredictor(object):
         y, y_val = y[:split_idx], y[split_idx:]
 
         checkpoint = ModelCheckpoint("best_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=3, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
         try:
             self.train_model.fit(
                 X, y, nb_epoch=max_epochs, validation_data=(X_val, y_val), callbacks=[checkpoint, early_stop]
