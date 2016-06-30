@@ -30,7 +30,7 @@ class TimeSeriesPredictor(object):
 
         masked = Masking()(input_layer)
 
-        embed1 = TimeDistributed(Dense(self.embed_size, activation="relu"))(masked)
+        # embed1 = TimeDistributed(Dense(self.embed_size, activation="relu"))(masked)
         # embed2 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed1)
         # embed3 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed2)
         # embed4 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed3)
@@ -40,9 +40,9 @@ class TimeSeriesPredictor(object):
 
         recurrent = SimpleRNN(
             self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
-        )(embed1)
+        )(masked)
 
-        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(recurrent)
+        # dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(recurrent)
         # dense2 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense1)
         # dense3 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense2)
         # dense4 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense3)
@@ -50,7 +50,7 @@ class TimeSeriesPredictor(object):
         # dense6 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense5)
         # dense1 = Dropout(0.3)(dense1)
 
-        output = TimeDistributed(Dense(7))(dense1)
+        output = TimeDistributed(Dense(7))(recurrent)
 
         model = Model(input=input_layer, output=output)
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
