@@ -4,7 +4,6 @@ import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout, SimpleRNN
 from keras.models import Model
-from keras.regularizers import l1
 
 from greenarm.util import get_logger, add_samples_until_divisible
 
@@ -20,7 +19,7 @@ class TimeSeriesPredictor(object):
         self.embed_size = 32
         self._weights_updated = False
 
-    def _build_model(self, maxlen=None, batch_size=None, phase="train"):
+    def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=3, dropout=0, activation="relu"):
         if phase == "train":
             assert maxlen is not None
             input_layer = Input(shape=(maxlen, 7))
@@ -30,27 +29,22 @@ class TimeSeriesPredictor(object):
 
         masked = Masking()(input_layer)
 
-        embed1 = TimeDistributed(Dense(self.embed_size, activation="relu"))(masked)
-        embed2 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed1)
-        embed3 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed2)
-        # embed4 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed3)
-        # embed5 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed4)
-        # embed6 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed5)
-        # embed = Dropout(0.3)(embed)
+        x_in = masked
+        for i in range(n_deep):
+            x_in = TimeDistributed(Dense(self.embed_size, activation=activation))(x_in)
+            if dropout != 0:
+                x_in = Dropout(dropout)(x_in)
 
         recurrent = SimpleRNN(
             self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
-        )(embed3)
+        )(x_in)
 
-        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(recurrent)
-        dense2 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense1)
-        dense3 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense2)
-        # dense4 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense3)
-        # dense5 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense4)
-        # dense6 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense5)
-        # dense1 = Dropout(0.3)(dense1)
+        for i in range(n_deep):
+            recurrent = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(recurrent)
+            if dropout != 0:
+                recurrent = Dropout(dropout)(recurrent)
 
-        output = TimeDistributed(Dense(7))(dense3)
+        output = TimeDistributed(Dense(7))(recurrent)
 
         model = Model(input=input_layer, output=output)
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
