@@ -15,8 +15,7 @@ class TimeSeriesPredictor(object):
         self.train_model = None
         self.predict_model = None
         self.num_hidden_recurrent = 128
-        self.num_hidden_dense = 128
-        self.embed_size = 32
+        self.num_hidden_dense = 32
         self._weights_updated = False
 
     def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=3, dropout=0, activation="relu"):
@@ -31,12 +30,17 @@ class TimeSeriesPredictor(object):
 
         x_in = masked
         for i in range(n_deep):
-            x_in = TimeDistributed(Dense(self.embed_size, activation=activation))(x_in)
+            x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(x_in)
             if dropout != 0:
                 x_in = Dropout(dropout)(x_in)
 
         recurrent = SimpleRNN(
-            self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
+            self.num_hidden_recurrent,
+            return_sequences=True,
+            stateful=phase == "predict",
+            dropout_W=dropout,
+            dropout_U=dropout,
+            init="glorot_normal"
         )(x_in)
 
         for i in range(n_deep):
