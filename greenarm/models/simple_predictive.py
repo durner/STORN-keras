@@ -18,7 +18,7 @@ class TimeSeriesPredictor(object):
         self.num_hidden_dense = 32
         self._weights_updated = False
 
-    def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=3, dropout=0, activation="relu"):
+    def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=10, dropout=0, activation="sigmoid"):
         if phase == "train":
             assert maxlen is not None
             input_layer = Input(shape=(maxlen, 7))
@@ -54,11 +54,13 @@ class TimeSeriesPredictor(object):
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
         return model
 
-    def build_train_model(self, maxlen):
-        self.train_model = self._build_model(maxlen=maxlen, phase="train")
+    def build_train_model(self, maxlen, n_deep=3, dropout=0, activation="relu"):
+        self.train_model = self._build_model(maxlen=maxlen, phase="train",
+                                             n_deep=n_deep, dropout=dropout, activation=activation)
 
-    def build_predict_model(self, batch_size):
-        self.predict_model = self._build_model(batch_size=batch_size, phase="predict")
+    def build_predict_model(self, batch_size, n_deep=3, dropout=0, activation="relu"):
+        self.predict_model = self._build_model(batch_size=batch_size, phase="predict",
+                                               n_deep=n_deep, dropout=dropout, activation=activation)
 
     def load_predict_weights(self):
         self.train_model.save_weights("tmp_weights.h5", overwrite=True)
@@ -111,7 +113,7 @@ class TimeSeriesPredictor(object):
         """
         x = inputs[-1]
         pred = self.predict_one_step(x)
-        return pred, (ground_truth-pred)**2
+        return pred, (ground_truth - pred) ** 2
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()

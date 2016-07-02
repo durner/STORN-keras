@@ -1,9 +1,14 @@
 from sklearn.grid_search import GridSearchCV
 
 from greenarm.util import get_logger
+import logging
 
-logger = get_logger(__name__)
-
+logger = get_logger("grid_search")
+hdlr = logging.FileHandler('results/grid_search/grid.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.INFO)
 
 class ModelSelector:
     def __init__(self, model):

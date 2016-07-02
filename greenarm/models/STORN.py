@@ -35,8 +35,8 @@ class STORNModel:
         self.z_recognition_model = None
         self._weights_updated = False
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=6, dropout=0.0, activation="relu"):
-        self.z_recognition_model = STORNRecognitionModel()
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+        self.z_recognition_model = STORNRecognitionModel(self.latent_dim)
         self.z_recognition_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size,
                                        n_deep=n_deep, dropout=dropout, activation=activation)
 
@@ -89,9 +89,11 @@ class STORNModel:
 
         return model
 
-    def build(self, joint_shape, seq_shape=None, batch_size=None):
-        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
-        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size)
+    def build(self, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape,
+                                       n_deep=n_deep, dropout=dropout, activation=activation)
+        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size,
+                                         n_deep=n_deep, dropout=dropout, activation=activation)
 
     def load_predict_weights(self):
         # self.train_model.save_weights("storn_weights.h5", overwrite=True)
@@ -101,7 +103,7 @@ class STORNModel:
     def reset_predict_model(self):
         self.predict_model.reset_states()
 
-    def fit(self, inputs, target, max_epochs=2, validation_split=0.1, n_deep=6, dropout=0.0, activation="relu"):
+    def fit(self, inputs, target, max_epochs=10, validation_split=0.2, n_deep=0, dropout=0.0, activation="relu"):
         seq_len = inputs[0].shape[1]
         self.train_model = self._build(Phases.train, 7, seq_shape=seq_len,
                                        n_deep=n_deep, dropout=dropout, activation=activation)
@@ -112,15 +114,15 @@ class STORNModel:
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=150, verbose=1)
         try:
             # A workaround so that keras does not complain
             padded_target = numpy.concatenate((train_target, numpy.zeros((train_target.shape[0],
                                                                           train_target.shape[1],
-                                                                          5 * train_target.shape[2]))), axis=-1)
+                                                                          4 * self.latent_dim + 7))), axis=-1)
             padded_valid_target = numpy.concatenate((valid_target, numpy.zeros((valid_target.shape[0],
                                                                                 valid_target.shape[1],
-                                                                                5 * valid_target.shape[2]))), axis=-1)
+                                                                                4 * self.latent_dim + 7))), axis=-1)
             self.train_model.fit(
                 train_input, padded_target,
                 validation_data=(valid_input, [padded_valid_target]),
@@ -176,10 +178,10 @@ class STORNModel:
 
 
 class STORNRecognitionModel:
-    def __init__(self):
+    def __init__(self, latent_dim):
+        self.latent_dim = latent_dim
         self.n_hidden_dense = 32
         self.n_hidden_recurrent = 128
-        self.latent_dim = 64
         self.train_recogn_stats = None
         self.train_input = None
         self.train_z_t = None
@@ -187,7 +189,7 @@ class STORNRecognitionModel:
         self.predict_input = None
         self.predict_z_t = None
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=6, dropout=0.0, activation="relu"):
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
         if phase == Phases.train:
             x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
         else:
@@ -267,7 +269,6 @@ class STORNStandardPriorModel:
         self.predict_prior_stats = None
 
     def _build(self, phase):
-
         prior_input = merge([self.x_tm1, self.z_tm1], mode="concat")
         rnn_prior = GRU(self.n_hidden_recurrent,
                         return_sequences=True,
@@ -286,13 +287,13 @@ class STORNStandardPriorModel:
             self.predict_prior_stats = self._build(Phases.predict)
 
     @staticmethod
-    def standard_input(number_of_series, seq_len, joint):
+    def standard_input(number_of_series, seq_len, latent_dim):
         sigma = numpy.ones(
-            (number_of_series, seq_len, joint),
+            (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
         my = numpy.zeros(
-            (number_of_series, seq_len, joint),
+            (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
         return numpy.concatenate([my, sigma], axis=-1)
