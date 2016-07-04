@@ -5,6 +5,7 @@ import theano.tensor as tensor
 import theano
 import numpy
 import time
+import keras.backend as K
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.engine import merge
 from keras.models import Model
@@ -28,36 +29,36 @@ class Phases:
 class STORNModel:
     def __init__(self):
         self.train_model = None
-        self.train_input = None
         self.predict_model = None
-        self.predict_input = None
-        self.storn_trending_prior = None
-        self.storn_rec = None
+        self.z_prior_model = None
+        self.z_recognition_model = None
         self._weights_updated = False
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
-        self.storn_trending_prior = STORNStandardPriorModel()
-        self.storn_trending_prior.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size)
-
-        self.storn_rec = STORNRecognitionModel()
-        self.storn_rec.build(joint_shape, phase=phase,  seq_shape=seq_shape, batch_size=batch_size)
+        self.z_recognition_model = STORNRecognitionModel()
+        self.z_recognition_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size)
 
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
-            rec_z = self.storn_rec.train_z
-            rec_input = self.storn_rec.train_input
-            rec = self.storn_rec.train_rnn_recogn_stats
-            prior = self.storn_trending_prior.train_trending
-            prior_input = self.storn_trending_prior.train_input
+            x_tm1 = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
+            z_t = self.z_recognition_model.train_z_t
+            x_t = self.z_recognition_model.train_input
+            z_post_stats = self.z_recognition_model.train_recogn_stats
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), name="storn_input_predict", dtype="float32")
-            rec_z = self.storn_rec.predict_z
-            rec_input = self.storn_rec.predict_input
-            rec = self.storn_rec.predict_rnn_recogn_stats
-            prior = self.storn_trending_prior.predict_trending
-            prior_input = self.storn_trending_prior.predict_input
+            x_tm1 = Input(batch_shape=(batch_size, 1, joint_shape), name="storn_input_predict", dtype="float32")
+            z_t = self.z_recognition_model.predict_z_t
+            x_t = self.z_recognition_model.predict_input
+            z_post_stats = self.z_recognition_model.predict_recogn_stats
 
-        gen_input = merge(inputs=[input_layer, rec_z], mode='concat')
+        z_tm1 = Lambda(self.shift_z, output_shape=self.shift_z_output_shape)(z_t)
+        self.z_prior_model = STORNStandardPriorModel(x_tm1=x_tm1, z_tm1=z_tm1)
+        self.z_prior_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size)
+
+        if phase == Phases.train:
+            z_prior_stats = self.z_prior_model.train_prior_stats
+        else:
+            z_prior_stats = self.z_prior_model.predict_prior_stats
+
+        gen_input = merge(inputs=[x_tm1, z_t], mode='concat')
         embed1 = TimeDistributed(Dense(50, activation="relu"))(gen_input)
         embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
         embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
@@ -76,18 +77,18 @@ class STORNModel:
         gen_map5 = TimeDistributed(Dense(50, activation="relu"))(gen_map4)
         gen_map6 = TimeDistributed(Dense(50, activation="relu"))(gen_map5)
 
-        rnn_gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map6)
-        rnn_gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map6)
+        gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map6)
+        gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map6)
 
-        output = merge([rnn_gen_mu, rnn_gen_sigma, rec, prior], mode='concat')
-        model = Model(input=[rec_input, input_layer, prior_input], output=output)
+        output = merge([gen_mu, gen_sigma, z_post_stats, z_prior_stats], mode='concat')
+        model = Model(input=[x_t, x_tm1], output=output)
         model.compile(optimizer='rmsprop', loss=keras_variational)
 
-        return model, input_layer
+        return model
 
     def build(self, joint_shape, seq_shape=None, batch_size=None):
-        self.train_model, self.train_input = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
-        self.predict_model, self.predict_input = self._build(Phases.predict, joint_shape, batch_size=batch_size)
+        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
+        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size)
 
     def load_predict_weights(self):
         # self.train_model.save_weights("storn_weights.h5", overwrite=True)
@@ -98,16 +99,12 @@ class STORNModel:
         self.predict_model.reset_states()
 
     def fit(self, inputs, target, max_epochs=2, validation_split=0.1):
-        list_in = inputs[:]
-        list_in.append(STORNStandardPriorModel.standard_input(inputs[0].shape[0], inputs[0].shape[1],
-                                                              inputs[0].shape[2]))
-
         seq_len = inputs[0].shape[1]
-        self.train_model, self.train_input = self._build(Phases.train, 7, seq_shape=seq_len)
+        self.train_model = self._build(Phases.train, 7, seq_shape=seq_len)
 
         split_idx = int((1. - validation_split) * inputs[0].shape[0])
 
-        train_input, valid_input = [list(t) for t in zip(*[(X[:split_idx], X[split_idx:]) for X in list_in])]
+        train_input, valid_input = [list(t) for t in zip(*[(X[:split_idx], X[split_idx:]) for X in inputs])]
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
@@ -135,16 +132,12 @@ class STORNModel:
         self.save()
 
     def predict_one_step(self, inputs):
-        list_in = inputs[:]
-        list_in.append(STORNStandardPriorModel.standard_input(inputs[0].shape[0], inputs[0].shape[1],
-                                                              inputs[0].shape[2]))
-
         original_num_samples = inputs[0].shape[0]
         _batch_size = 32
-        inputs = [add_samples_until_divisible(input_x, _batch_size) for input_x in list_in]
+        inputs = [add_samples_until_divisible(input_x, _batch_size) for input_x in inputs]
 
         if self.predict_model is None:
-            self.predict_model, self.predict_input = self._build(Phases.predict, joint_shape=7, batch_size=_batch_size)
+            self.predict_model = self._build(Phases.predict, joint_shape=7, batch_size=_batch_size)
             self.load_predict_weights()
 
         return self.predict_model.predict(inputs, batch_size=_batch_size)[:original_num_samples, :, :]
@@ -169,23 +162,32 @@ class STORNModel:
         self.train_model.save_weights(prefix + ".weights.h5", overwrite=True)
         return prefix
 
+    @staticmethod
+    def shift_z(rec_z):
+        return K.concatenate((K.random_normal(shape=(rec_z.shape[0], 1, rec_z.shape[2])),
+                              rec_z[:, :-1, :]), axis=1)
+
+    @staticmethod
+    def shift_z_output_shape(input_shape):
+        return input_shape
+
 
 class STORNRecognitionModel:
     def __init__(self):
-        self.train_rnn_recogn_stats = None
+        self.train_recogn_stats = None
         self.train_input = None
-        self.train_z = None
-        self.predict_rnn_recogn_stats = None
+        self.train_z_t = None
+        self.predict_recogn_stats = None
         self.predict_input = None
-        self.predict_z = None
+        self.predict_z_t = None
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
+            x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
+            x_t = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
 
-        embed1 = TimeDistributed(Dense(50, activation="relu"))(input_layer)
+        embed1 = TimeDistributed(Dense(50, activation="relu"))(x_t)
         embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
         embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
         embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
@@ -207,20 +209,20 @@ class STORNRecognitionModel:
         rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
 
         # sample z from the distribution in X
-        sample_z = TimeDistributed(Lambda(self.do_sample,
-                                          output_shape=self.sample_output_shape,
-                                          arguments={'batch_size': (None if (phase == Phases.train) else batch_size),
-                                                     'dim_size': joint_shape}))(rnn_recogn_stats)
+        z_t = TimeDistributed(Lambda(self.do_sample,
+                                     output_shape=self.sample_output_shape,
+                                     arguments={'batch_size': (None if (phase == Phases.train) else batch_size),
+                                                'dim_size': joint_shape}))(rnn_recogn_stats)
 
-        return rnn_recogn_stats, input_layer, sample_z
+        return rnn_recogn_stats, x_t, z_t
 
     def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            self.train_rnn_recogn_stats, self.train_input, self.train_z = self._build(Phases.train, joint_shape,
-                                                                                      seq_shape=seq_shape)
+            self.train_recogn_stats, self.train_input, self.train_z_t = self._build(Phases.train, joint_shape,
+                                                                                    seq_shape=seq_shape)
         else:
-            self.predict_rnn_recogn_stats, self.predict_input, self.predict_z = self._build(Phases.predict, joint_shape,
-                                                                                            batch_size=batch_size)
+            self.predict_recogn_stats, self.predict_input, self.predict_z_t = self._build(Phases.predict, joint_shape,
+                                                                                          batch_size=batch_size)
 
     @staticmethod
     def do_sample(statistics, batch_size, dim_size):
@@ -242,25 +244,37 @@ class STORNRecognitionModel:
 
 
 class STORNStandardPriorModel:
-    def __init__(self):
-        self.train_trending = None
-        self.train_input = None
-        self.predict_trending = None
-        self.predict_input = None
+    def __init__(self, x_tm1, z_tm1):
+        self.n_hidden_recurrent = 128
+        self.x_tm1 = x_tm1
+        self.z_tm1 = z_tm1
+        self.train_prior_stats = None
+        self.predict_prior_stats = None
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
+    def _build(self, phase, latent_dim, seq_shape=None, batch_size=None):
+
+        prior_input = merge([self.x_tm1, self.z_tm1], mode="concat")
+        rnn_prior = GRU(self.n_hidden_recurrent,
+                        return_sequences=True,
+                        stateful=(phase == Phases.predict),
+                        consume_less='gpu')(
+            prior_input)
+        rnn_rec_mu = TimeDistributed(Dense(latent_dim, activation='linear'))(rnn_prior)
+        rnn_rec_sigma = TimeDistributed(Dense(latent_dim, activation="softplus"))(rnn_prior)
+
+        # if phase == Phases.train:
+        #     input_layer = Input(shape=(seq_shape, 2 * latent_dim), name="storn_prior_input_train", dtype="float32")
+        # else:
+        #     input_layer = Input(batch_shape=(batch_size, 1, 2 * latent_dim), name="storn_prior_input_predict",
+        #                         dtype="float32")
+
+        return merge([rnn_rec_mu, rnn_rec_sigma], mode="concat")
+
+    def build(self, latent_dim, phase=Phases.train, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            input_layer = Input(shape=(seq_shape, 2 * joint_shape), name="storn_prior_input_train", dtype="float32")
+            self.train_prior_stats = self._build(Phases.train, latent_dim, seq_shape=seq_shape)
         else:
-            input_layer = Input(batch_shape=(batch_size, 1, 2 * joint_shape), name="storn_prior_input_predict", dtype="float32")
-
-        return input_layer, input_layer
-
-    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
-        if phase == Phases.train:
-            self.train_trending, self.train_input = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
-        else:
-            self.predict_trending, self.predict_input = self._build(Phases.predict, joint_shape, batch_size=batch_size)
+            self.predict_prior_stats = self._build(Phases.predict, latent_dim, batch_size=batch_size)
 
     @staticmethod
     def standard_input(number_of_series, seq_len, joint):
@@ -272,5 +286,4 @@ class STORNStandardPriorModel:
             (number_of_series, seq_len, joint),
             dtype="float32"
         )
-
         return numpy.concatenate([my, sigma], axis=-1)
