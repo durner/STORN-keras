@@ -1,8 +1,6 @@
 """
 Implementation of the STORN model from the paper.
 """
-import theano.tensor as tensor
-import theano
 import numpy
 import time
 import keras.backend as K
@@ -28,15 +26,19 @@ class Phases:
 
 class STORNModel:
     def __init__(self):
+        self.latent_dim = 64
+        self.n_hidden_dense = 32
+        self.n_hidden_recurrent = 128
         self.train_model = None
         self.predict_model = None
         self.z_prior_model = None
         self.z_recognition_model = None
         self._weights_updated = False
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
-        self.z_recognition_model = STORNRecognitionModel()
-        self.z_recognition_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size)
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+        self.z_recognition_model = STORNRecognitionModel(self.latent_dim)
+        self.z_recognition_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size,
+                                       n_deep=n_deep, dropout=dropout, activation=activation)
 
         if phase == Phases.train:
             x_tm1 = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
@@ -51,34 +53,35 @@ class STORNModel:
 
         z_tm1 = Lambda(self.shift_z, output_shape=self.shift_z_output_shape)(z_t)
         self.z_prior_model = STORNStandardPriorModel(x_tm1=x_tm1, z_tm1=z_tm1)
-        self.z_prior_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size)
+        self.z_prior_model.build(phase=phase)
 
         if phase == Phases.train:
             z_prior_stats = self.z_prior_model.train_prior_stats
         else:
             z_prior_stats = self.z_prior_model.predict_prior_stats
 
+        # Feature map for the input to the generative model
         gen_input = merge(inputs=[x_tm1, z_t], mode='concat')
-        embed1 = TimeDistributed(Dense(50, activation="relu"))(gen_input)
-        embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
-        embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
-        embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
-        embed5 = TimeDistributed(Dense(50, activation="relu"))(embed4)
-        embed6 = TimeDistributed(Dense(50, activation="relu"))(embed5)
-        # embed4 = Dropout(0.3)(embed4)
+        for i in range(n_deep):
+            gen_input = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(gen_input)
+            if dropout != 0:
+                gen_input = Dropout(dropout)(gen_input)
 
-        rnn_gen = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), consume_less='gpu')(
-            embed6)
+        # RNN core of the generative model
+        rnn_gen = GRU(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
+                      consume_less='gpu')(
+            gen_input)
 
-        gen_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_gen)
-        gen_map2 = TimeDistributed(Dense(50, activation="relu"))(gen_map1)
-        gen_map3 = TimeDistributed(Dense(50, activation="relu"))(gen_map2)
-        gen_map4 = TimeDistributed(Dense(50, activation="relu"))(gen_map3)
-        gen_map5 = TimeDistributed(Dense(50, activation="relu"))(gen_map4)
-        gen_map6 = TimeDistributed(Dense(50, activation="relu"))(gen_map5)
+        # Feature map of the output of the generative model
+        gen_map = rnn_gen
+        for i in range(n_deep):
+            gen_map = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(gen_map)
+            if dropout != 0:
+                gen_map = Dropout(dropout)(gen_map)
 
-        gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map6)
-        gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map6)
+        # Output statistics for the generative model
+        gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map)
+        gen_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(gen_map)
 
         output = merge([gen_mu, gen_sigma, z_post_stats, z_prior_stats], mode='concat')
         model = Model(input=[x_t, x_tm1], output=output)
@@ -86,9 +89,11 @@ class STORNModel:
 
         return model
 
-    def build(self, joint_shape, seq_shape=None, batch_size=None):
-        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
-        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size)
+    def build(self, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape,
+                                       n_deep=n_deep, dropout=dropout, activation=activation)
+        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size,
+                                         n_deep=n_deep, dropout=dropout, activation=activation)
 
     def load_predict_weights(self):
         # self.train_model.save_weights("storn_weights.h5", overwrite=True)
@@ -98,9 +103,10 @@ class STORNModel:
     def reset_predict_model(self):
         self.predict_model.reset_states()
 
-    def fit(self, inputs, target, max_epochs=2, validation_split=0.1):
+    def fit(self, inputs, target, max_epochs=10, validation_split=0.2, n_deep=0, dropout=0.0, activation="relu"):
         seq_len = inputs[0].shape[1]
-        self.train_model = self._build(Phases.train, 7, seq_shape=seq_len)
+        self.train_model = self._build(Phases.train, 7, seq_shape=seq_len,
+                                       n_deep=n_deep, dropout=dropout, activation=activation)
 
         split_idx = int((1. - validation_split) * inputs[0].shape[0])
 
@@ -108,22 +114,21 @@ class STORNModel:
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=150, verbose=1)
         try:
-            # A workaround so that kears does not complain
+            # A workaround so that keras does not complain
             padded_target = numpy.concatenate((train_target, numpy.zeros((train_target.shape[0],
                                                                           train_target.shape[1],
-                                                                          5 * train_target.shape[2]))), axis=-1)
+                                                                          4 * self.latent_dim + 7))), axis=-1)
             padded_valid_target = numpy.concatenate((valid_target, numpy.zeros((valid_target.shape[0],
                                                                                 valid_target.shape[1],
-                                                                                5 * valid_target.shape[2]))), axis=-1)
+                                                                                4 * self.latent_dim + 7))), axis=-1)
             self.train_model.fit(
                 train_input, padded_target,
                 validation_data=(valid_input, [padded_valid_target]),
                 callbacks=[checkpoint, early_stop],
                 nb_epoch=max_epochs
             )
-
         except KeyboardInterrupt:
             logger.debug("Training interrupted! Restoring best weights and saving..")
 
@@ -145,9 +150,9 @@ class STORNModel:
     def evaluate(self, inputs, ground_truth):
         """
         :param inputs: a list of inputs for the model. In this case, it's a
-                       one element list.
+                       two element list.
         :param ground_truth: the expected value to compare to
-        :return: plotting artifacts: input, prediction, and error matrices
+        :return: plotting artifacts: input, prediction, and error
         """
         pred = self.predict_one_step(inputs)[:, :, :7]
         return pred, (ground_truth - pred) ** 2
@@ -173,7 +178,10 @@ class STORNModel:
 
 
 class STORNRecognitionModel:
-    def __init__(self):
+    def __init__(self, latent_dim):
+        self.latent_dim = latent_dim
+        self.n_hidden_dense = 32
+        self.n_hidden_recurrent = 128
         self.train_recogn_stats = None
         self.train_input = None
         self.train_z_t = None
@@ -181,48 +189,56 @@ class STORNRecognitionModel:
         self.predict_input = None
         self.predict_z_t = None
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
         if phase == Phases.train:
             x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
         else:
             x_t = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
 
-        embed1 = TimeDistributed(Dense(50, activation="relu"))(x_t)
-        embed2 = TimeDistributed(Dense(50, activation="relu"))(embed1)
-        embed3 = TimeDistributed(Dense(50, activation="relu"))(embed2)
-        embed4 = TimeDistributed(Dense(50, activation="relu"))(embed3)
-        embed5 = TimeDistributed(Dense(50, activation="relu"))(embed4)
-        embed6 = TimeDistributed(Dense(50, activation="relu"))(embed5)
-        # embed4 = Dropout(0.3)(embed4)
-        rnn_recogn = GRU(128, return_sequences=True, stateful=(phase == Phases.predict), consume_less='gpu')(
-            embed6)
-        recogn_map1 = TimeDistributed(Dense(50, activation="relu"))(rnn_recogn)
-        recogn_map2 = TimeDistributed(Dense(50, activation="relu"))(recogn_map1)
-        recogn_map3 = TimeDistributed(Dense(50, activation="relu"))(recogn_map2)
-        recogn_map4 = TimeDistributed(Dense(50, activation="relu"))(recogn_map3)
-        recogn_map5 = TimeDistributed(Dense(50, activation="relu"))(recogn_map4)
-        recogn_map6 = TimeDistributed(Dense(50, activation="relu"))(recogn_map5)
-        rnn_recogn_mu = TimeDistributed(Dense(joint_shape, activation='linear'))(recogn_map6)
-        rnn_recogn_sigma = TimeDistributed(Dense(joint_shape, activation="softplus"))(recogn_map6)
+        recogn_input = x_t
+        for i in range(n_deep):
+            recogn_input = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(recogn_input)
+            if dropout != 0:
+                recogn_input = Dropout(dropout)(recogn_input)
 
-        # sample z|
-        rnn_recogn_stats = merge([rnn_recogn_mu, rnn_recogn_sigma], mode='concat')
+        recogn_rnn = GRU(self.n_hidden_recurrent,
+                         return_sequences=True,
+                         stateful=(phase == Phases.predict),
+                         consume_less='gpu')(
+            recogn_input)
+
+        recogn_map = recogn_rnn
+        for i in range(n_deep):
+            recogn_map = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(recogn_map)
+            if dropout != 0:
+                recogn_map = Dropout(dropout)(recogn_map)
+
+        recogn_mu = TimeDistributed(Dense(self.latent_dim, activation='linear'))(recogn_map)
+        recogn_sigma = TimeDistributed(Dense(self.latent_dim, activation="softplus"))(recogn_map)
+        recogn_stats = merge([recogn_mu, recogn_sigma], mode='concat')
 
         # sample z from the distribution in X
         z_t = TimeDistributed(Lambda(self.do_sample,
                                      output_shape=self.sample_output_shape,
                                      arguments={'batch_size': (None if (phase == Phases.train) else batch_size),
-                                                'dim_size': joint_shape}))(rnn_recogn_stats)
+                                                'dim_size': self.latent_dim}))(recogn_stats)
 
-        return rnn_recogn_stats, x_t, z_t
+        return recogn_stats, x_t, z_t
 
-    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
+    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None,
+              n_deep=6, dropout=0.0, activation="relu"):
         if phase == Phases.train:
             self.train_recogn_stats, self.train_input, self.train_z_t = self._build(Phases.train, joint_shape,
-                                                                                    seq_shape=seq_shape)
+                                                                                    seq_shape=seq_shape,
+                                                                                    n_deep=n_deep,
+                                                                                    dropout=dropout,
+                                                                                    activation=activation)
         else:
             self.predict_recogn_stats, self.predict_input, self.predict_z_t = self._build(Phases.predict, joint_shape,
-                                                                                          batch_size=batch_size)
+                                                                                          batch_size=batch_size,
+                                                                                          n_deep=n_deep,
+                                                                                          dropout=dropout,
+                                                                                          activation=activation)
 
     @staticmethod
     def do_sample(statistics, batch_size, dim_size):
@@ -245,45 +261,39 @@ class STORNRecognitionModel:
 
 class STORNStandardPriorModel:
     def __init__(self, x_tm1, z_tm1):
+        self.latent_dim = 64
         self.n_hidden_recurrent = 128
         self.x_tm1 = x_tm1
         self.z_tm1 = z_tm1
         self.train_prior_stats = None
         self.predict_prior_stats = None
 
-    def _build(self, phase, latent_dim, seq_shape=None, batch_size=None):
-
+    def _build(self, phase):
         prior_input = merge([self.x_tm1, self.z_tm1], mode="concat")
         rnn_prior = GRU(self.n_hidden_recurrent,
                         return_sequences=True,
                         stateful=(phase == Phases.predict),
                         consume_less='gpu')(
             prior_input)
-        rnn_rec_mu = TimeDistributed(Dense(latent_dim, activation='linear'))(rnn_prior)
-        rnn_rec_sigma = TimeDistributed(Dense(latent_dim, activation="softplus"))(rnn_prior)
-
-        # if phase == Phases.train:
-        #     input_layer = Input(shape=(seq_shape, 2 * latent_dim), name="storn_prior_input_train", dtype="float32")
-        # else:
-        #     input_layer = Input(batch_shape=(batch_size, 1, 2 * latent_dim), name="storn_prior_input_predict",
-        #                         dtype="float32")
+        rnn_rec_mu = TimeDistributed(Dense(self.latent_dim, activation='linear'))(rnn_prior)
+        rnn_rec_sigma = TimeDistributed(Dense(self.latent_dim, activation="softplus"))(rnn_prior)
 
         return merge([rnn_rec_mu, rnn_rec_sigma], mode="concat")
 
-    def build(self, latent_dim, phase=Phases.train, seq_shape=None, batch_size=None):
+    def build(self, phase=Phases.train):
         if phase == Phases.train:
-            self.train_prior_stats = self._build(Phases.train, latent_dim, seq_shape=seq_shape)
+            self.train_prior_stats = self._build(Phases.train)
         else:
-            self.predict_prior_stats = self._build(Phases.predict, latent_dim, batch_size=batch_size)
+            self.predict_prior_stats = self._build(Phases.predict)
 
     @staticmethod
-    def standard_input(number_of_series, seq_len, joint):
+    def standard_input(number_of_series, seq_len, latent_dim):
         sigma = numpy.ones(
-            (number_of_series, seq_len, joint),
+            (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
         my = numpy.zeros(
-            (number_of_series, seq_len, joint),
+            (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
         return numpy.concatenate([my, sigma], axis=-1)

@@ -4,7 +4,6 @@ import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout, SimpleRNN
 from keras.models import Model
-from keras.regularizers import l1
 
 from greenarm.util import get_logger, add_samples_until_divisible
 
@@ -16,11 +15,10 @@ class TimeSeriesPredictor(object):
         self.train_model = None
         self.predict_model = None
         self.num_hidden_recurrent = 128
-        self.num_hidden_dense = 128
-        self.embed_size = 32
+        self.num_hidden_dense = 32
         self._weights_updated = False
 
-    def _build_model(self, maxlen=None, batch_size=None, phase="train"):
+    def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=10, dropout=0, activation="sigmoid"):
         if phase == "train":
             assert maxlen is not None
             input_layer = Input(shape=(maxlen, 7))
@@ -30,37 +28,39 @@ class TimeSeriesPredictor(object):
 
         masked = Masking()(input_layer)
 
-        embed1 = TimeDistributed(Dense(self.embed_size, activation="relu"))(masked)
-        embed2 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed1)
-        embed3 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed2)
-        # embed4 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed3)
-        # embed5 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed4)
-        # embed6 = TimeDistributed(Dense(self.embed_size, activation="relu"))(embed5)
-        # embed = Dropout(0.3)(embed)
+        x_in = masked
+        for i in range(n_deep):
+            x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(x_in)
+            if dropout != 0:
+                x_in = Dropout(dropout)(x_in)
 
         recurrent = SimpleRNN(
-            self.num_hidden_recurrent, return_sequences=True, stateful=phase == "predict", dropout_W=0.2, dropout_U=0.2
-        )(embed3)
+            self.num_hidden_recurrent,
+            return_sequences=True,
+            stateful=phase == "predict",
+            dropout_W=dropout,
+            dropout_U=dropout,
+            init="glorot_normal"
+        )(x_in)
 
-        dense1 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(recurrent)
-        dense2 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense1)
-        dense3 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense2)
-        # dense4 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense3)
-        # dense5 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense4)
-        # dense6 = TimeDistributed(Dense(self.num_hidden_dense, activation="relu"))(dense5)
-        # dense1 = Dropout(0.3)(dense1)
+        for i in range(n_deep):
+            recurrent = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(recurrent)
+            if dropout != 0:
+                recurrent = Dropout(dropout)(recurrent)
 
-        output = TimeDistributed(Dense(7))(dense3)
+        output = TimeDistributed(Dense(7))(recurrent)
 
         model = Model(input=input_layer, output=output)
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
         return model
 
-    def build_train_model(self, maxlen):
-        self.train_model = self._build_model(maxlen=maxlen, phase="train")
+    def build_train_model(self, maxlen, n_deep=3, dropout=0, activation="relu"):
+        self.train_model = self._build_model(maxlen=maxlen, phase="train",
+                                             n_deep=n_deep, dropout=dropout, activation=activation)
 
-    def build_predict_model(self, batch_size):
-        self.predict_model = self._build_model(batch_size=batch_size, phase="predict")
+    def build_predict_model(self, batch_size, n_deep=3, dropout=0, activation="relu"):
+        self.predict_model = self._build_model(batch_size=batch_size, phase="predict",
+                                               n_deep=n_deep, dropout=dropout, activation=activation)
 
     def load_predict_weights(self):
         self.train_model.save_weights("tmp_weights.h5", overwrite=True)
@@ -113,7 +113,7 @@ class TimeSeriesPredictor(object):
         """
         x = inputs[-1]
         pred = self.predict_one_step(x)
-        return pred, (ground_truth-pred)**2
+        return pred, (ground_truth - pred) ** 2
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
