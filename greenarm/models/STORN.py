@@ -1,6 +1,8 @@
 """
 Implementation of the STORN model from the paper.
 """
+import codecs
+
 import numpy
 import time
 import keras.backend as K
@@ -34,6 +36,9 @@ class STORNModel:
         self.z_prior_model = None
         self.z_recognition_model = None
         self._weights_updated = False
+        self.n_deep = 0
+        self.dropout = 0
+        self.activation='relu'
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
         self.z_recognition_model = STORNRecognitionModel(self.latent_dim)
@@ -41,11 +46,15 @@ class STORNModel:
                                        n_deep=n_deep, dropout=dropout, activation=activation)
 
         if phase == Phases.train:
+            self.n_deep = n_deep  # save number of deep layers to class so we can restore on evalutation model
+            self.dropout = dropout
             x_tm1 = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
             z_t = self.z_recognition_model.train_z_t
             x_t = self.z_recognition_model.train_input
             z_post_stats = self.z_recognition_model.train_recogn_stats
         else:
+            n_deep = self.n_deep  # restore number of deep layers so we have the right architecture for loading
+            dropout = self.dropout
             x_tm1 = Input(batch_shape=(batch_size, 1, joint_shape), name="storn_input_predict", dtype="float32")
             z_t = self.z_recognition_model.predict_z_t
             x_t = self.z_recognition_model.predict_input
@@ -166,7 +175,7 @@ class STORNModel:
 
         logger.debug("Saving model to %s" % prefix)
 
-        with open(prefix + ".json", "w") as of:
+        with codecs.open(prefix + ".json", "w", "UTF-8") as of:
             of.write(self.train_model.to_json())
 
         self.train_model.save_weights(prefix + ".weights.h5")
