@@ -164,7 +164,12 @@ class STORNModel:
         if prefix is None:
             prefix = "saved_models/STORN_%s.model" % int(time.time())
 
-        self.train_model.save_weights(prefix + ".weights.h5", overwrite=True)
+        logger.debug("Saving model to %s" % prefix)
+
+        with open(prefix + ".json", "w") as of:
+            of.write(self.train_model.to_json())
+
+        self.train_model.save_weights(prefix + ".weights.h5")
         return prefix
 
     @staticmethod
