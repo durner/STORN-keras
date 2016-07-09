@@ -11,14 +11,33 @@ logger = get_logger(__name__)
 
 
 class TimeSeriesPredictor(object):
-    def __init__(self):
+    def __init__(self, n_deep=10, num_hidden_recurrent=128, num_hidden_dense=32, dropout=0, activation="sigmoid"):
+        self.n_deep = n_deep
+        self.dropout = dropout
+        self.activation = activation
+        self.num_hidden_recurrent = num_hidden_recurrent
+        self.num_hidden_dense = num_hidden_dense
+
         self.train_model = None
         self.predict_model = None
-        self.num_hidden_recurrent = 128
-        self.num_hidden_dense = 32
         self._weights_updated = False
 
-    def _build_model(self, maxlen=None, batch_size=None, phase="train", n_deep=10, dropout=0, activation="sigmoid"):
+    def get_params(self, deep=True):
+        return {
+            "n_deep": self.n_deep,
+            "dropout": self.dropout,
+            "activation": self.activation,
+            "num_hidden_recurrent": self.num_hidden_recurrent,
+            "num_hidden_dense": self.num_hidden_dense
+        }
+
+    def set_params(self, **params):
+        for param_name, param in params.items():
+            setattr(self, param_name, param)
+
+        return self
+
+    def _build_model(self, maxlen=None, batch_size=None, phase="train"):
         if phase == "train":
             assert maxlen is not None
             input_layer = Input(shape=(maxlen, 7))
@@ -29,24 +48,24 @@ class TimeSeriesPredictor(object):
         masked = Masking()(input_layer)
 
         x_in = masked
-        for i in range(n_deep):
-            x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(x_in)
-            if dropout != 0:
-                x_in = Dropout(dropout)(x_in)
+        for i in range(self.n_deep):
+            x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(x_in)
+            if self.dropout != 0.0:
+                x_in = Dropout(self.dropout)(x_in)
 
         recurrent = SimpleRNN(
             self.num_hidden_recurrent,
             return_sequences=True,
             stateful=phase == "predict",
-            dropout_W=dropout,
-            dropout_U=dropout,
+            dropout_W=self.dropout,
+            dropout_U=self.dropout,
             init="glorot_normal"
         )(x_in)
 
-        for i in range(n_deep):
-            recurrent = TimeDistributed(Dense(self.num_hidden_dense, activation=activation))(recurrent)
-            if dropout != 0:
-                recurrent = Dropout(dropout)(recurrent)
+        for i in range(self.n_deep):
+            recurrent = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(recurrent)
+            if self.dropout != 0.0:
+                recurrent = Dropout(self.dropout)(recurrent)
 
         output = TimeDistributed(Dense(7))(recurrent)
 
@@ -54,13 +73,11 @@ class TimeSeriesPredictor(object):
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
         return model
 
-    def build_train_model(self, maxlen, n_deep=3, dropout=0, activation="relu"):
-        self.train_model = self._build_model(maxlen=maxlen, phase="train",
-                                             n_deep=n_deep, dropout=dropout, activation=activation)
+    def build_train_model(self, maxlen):
+        self.train_model = self._build_model(maxlen=maxlen, phase="train")
 
-    def build_predict_model(self, batch_size, n_deep=3, dropout=0, activation="relu"):
-        self.predict_model = self._build_model(batch_size=batch_size, phase="predict",
-                                               n_deep=n_deep, dropout=dropout, activation=activation)
+    def build_predict_model(self, batch_size):
+        self.predict_model = self._build_model(batch_size=batch_size, phase="predict")
 
     def load_predict_weights(self):
         self.train_model.save_weights("tmp_weights.h5", overwrite=True)
@@ -90,6 +107,9 @@ class TimeSeriesPredictor(object):
         self.train_model.load_weights("best_weights.h5")
         self._weights_updated = True
         self.save()
+
+    def predict(self, X):
+        return self.train_model.predict(X)
 
     def predict_one_step(self, x):
         original_num_samples = x.shape[0]

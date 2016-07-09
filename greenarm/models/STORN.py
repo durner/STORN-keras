@@ -26,35 +26,49 @@ class Phases:
     train = 2
 
 
-class STORNModel:
-    def __init__(self):
-        self.latent_dim = 64
-        self.n_hidden_dense = 32
-        self.n_hidden_recurrent = 128
+class STORNModel(object):
+    def __init__(self, latent_dim=64, n_hidden_dense=32, n_hidden_recurrent=128, n_deep=0, dropout=0, activation='relu'):
+        self.latent_dim = latent_dim
+        self.n_hidden_dense = n_hidden_dense
+        self.n_hidden_recurrent = n_hidden_recurrent
+        self.n_deep = n_deep
+        self.dropout = dropout
+        self.activation = activation
+
         self.train_model = None
         self.predict_model = None
         self.z_prior_model = None
         self.z_recognition_model = None
         self._weights_updated = False
-        self.n_deep = 0
-        self.dropout = 0
-        self.activation='relu'
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+    def get_params(self, deep=True):
+        return {
+            "latent_dim": self.latent_dim,
+            "n_hidden_dense": self.n_hidden_dense,
+            "n_hidden_recurrent": self.n_hidden_recurrent,
+            "n_deep": self.n_deep,
+            "dropout": self.dropout,
+            "activation": self.activation
+        }
+
+    def set_params(self, **params):
+        for param_name, param in params.items():
+            setattr(self, param_name, param)
+
+        return self
+
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         self.z_recognition_model = STORNRecognitionModel(self.latent_dim)
-        self.z_recognition_model.build(joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size,
-                                       n_deep=n_deep, dropout=dropout, activation=activation)
+        self.z_recognition_model.build(
+            joint_shape, phase=phase, seq_shape=seq_shape, batch_size=batch_size
+        )
 
         if phase == Phases.train:
-            self.n_deep = n_deep  # save number of deep layers to class so we can restore on evalutation model
-            self.dropout = dropout
             x_tm1 = Input(shape=(seq_shape, joint_shape), name="storn_input_train", dtype="float32")
             z_t = self.z_recognition_model.train_z_t
             x_t = self.z_recognition_model.train_input
             z_post_stats = self.z_recognition_model.train_recogn_stats
         else:
-            n_deep = self.n_deep  # restore number of deep layers so we have the right architecture for loading
-            dropout = self.dropout
             x_tm1 = Input(batch_shape=(batch_size, 1, joint_shape), name="storn_input_predict", dtype="float32")
             z_t = self.z_recognition_model.predict_z_t
             x_t = self.z_recognition_model.predict_input
@@ -71,10 +85,10 @@ class STORNModel:
 
         # Feature map for the input to the generative model
         gen_input = merge(inputs=[x_tm1, z_t], mode='concat')
-        for i in range(n_deep):
-            gen_input = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(gen_input)
-            if dropout != 0:
-                gen_input = Dropout(dropout)(gen_input)
+        for i in range(self.n_deep):
+            gen_input = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(gen_input)
+            if self.dropout != 0:
+                gen_input = Dropout(self.dropout)(gen_input)
 
         # RNN core of the generative model
         rnn_gen = GRU(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
@@ -83,10 +97,10 @@ class STORNModel:
 
         # Feature map of the output of the generative model
         gen_map = rnn_gen
-        for i in range(n_deep):
-            gen_map = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(gen_map)
-            if dropout != 0:
-                gen_map = Dropout(dropout)(gen_map)
+        for i in range(self.n_deep):
+            gen_map = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(gen_map)
+            if self.dropout != 0:
+                gen_map = Dropout(self.dropout)(gen_map)
 
         # Output statistics for the generative model
         gen_mu = TimeDistributed(Dense(joint_shape, activation="linear"))(gen_map)
@@ -98,11 +112,9 @@ class STORNModel:
 
         return model
 
-    def build(self, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
-        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape,
-                                       n_deep=n_deep, dropout=dropout, activation=activation)
-        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size,
-                                         n_deep=n_deep, dropout=dropout, activation=activation)
+    def build(self, joint_shape, seq_shape=None, batch_size=None):
+        self.train_model = self._build(Phases.train, joint_shape, seq_shape=seq_shape)
+        self.predict_model = self._build(Phases.predict, joint_shape, batch_size=batch_size)
 
     def load_predict_weights(self):
         # self.train_model.save_weights("storn_weights.h5", overwrite=True)
@@ -112,10 +124,9 @@ class STORNModel:
     def reset_predict_model(self):
         self.predict_model.reset_states()
 
-    def fit(self, inputs, target, max_epochs=10, validation_split=0.2, n_deep=0, dropout=0.0, activation="relu"):
+    def fit(self, inputs, target, max_epochs=10, validation_split=0.2):
         seq_len = inputs[0].shape[1]
-        self.train_model = self._build(Phases.train, 7, seq_shape=seq_len,
-                                       n_deep=n_deep, dropout=dropout, activation=activation)
+        self.train_model = self._build(Phases.train, 7, seq_shape=seq_len)
 
         split_idx = int((1. - validation_split) * inputs[0].shape[0])
 
@@ -156,6 +167,9 @@ class STORNModel:
 
         return self.predict_model.predict(inputs, batch_size=_batch_size)[:original_num_samples, :, :]
 
+    def predict(self, X):
+        return self.train_model.predict(X)
+
     def evaluate(self, inputs, ground_truth):
         """
         :param inputs: a list of inputs for the model. In this case, it's a
@@ -176,6 +190,7 @@ class STORNModel:
         logger.debug("Saving model to %s" % prefix)
 
         with codecs.open(prefix + ".json", "w", "UTF-8") as of:
+            print self.train_model.to_json()
             of.write(self.train_model.to_json())
 
         self.train_model.save_weights(prefix + ".weights.h5")
@@ -191,11 +206,16 @@ class STORNModel:
         return input_shape
 
 
-class STORNRecognitionModel:
-    def __init__(self, latent_dim):
+class STORNRecognitionModel(object):
+    def __init__(self, latent_dim=64, n_hidden_dense=32, n_hidden_recurrent=128, n_deep=0, dropout=0, activation='relu'):
         self.latent_dim = latent_dim
-        self.n_hidden_dense = 32
-        self.n_hidden_recurrent = 128
+        self.n_hidden_dense = n_hidden_dense
+        self.n_hidden_recurrent = n_hidden_recurrent
+        self.n_deep = n_deep
+        self.dropout = dropout
+        self.activation = activation
+        self.latent_dim = latent_dim
+
         self.train_recogn_stats = None
         self.train_input = None
         self.train_z_t = None
@@ -203,17 +223,17 @@ class STORNRecognitionModel:
         self.predict_input = None
         self.predict_z_t = None
 
-    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None, n_deep=0, dropout=0.0, activation="relu"):
+    def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
             x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
         else:
             x_t = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
 
         recogn_input = x_t
-        for i in range(n_deep):
-            recogn_input = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(recogn_input)
-            if dropout != 0:
-                recogn_input = Dropout(dropout)(recogn_input)
+        for i in range(self.n_deep):
+            recogn_input = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(recogn_input)
+            if self.dropout != 0.0:
+                recogn_input = Dropout(self.dropout)(recogn_input)
 
         recogn_rnn = GRU(self.n_hidden_recurrent,
                          return_sequences=True,
@@ -222,10 +242,10 @@ class STORNRecognitionModel:
             recogn_input)
 
         recogn_map = recogn_rnn
-        for i in range(n_deep):
-            recogn_map = TimeDistributed(Dense(self.n_hidden_dense, activation=activation))(recogn_map)
-            if dropout != 0:
-                recogn_map = Dropout(dropout)(recogn_map)
+        for i in range(self.n_deep):
+            recogn_map = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(recogn_map)
+            if self.dropout != 0:
+                recogn_map = Dropout(self.dropout)(recogn_map)
 
         recogn_mu = TimeDistributed(Dense(self.latent_dim, activation='linear'))(recogn_map)
         recogn_sigma = TimeDistributed(Dense(self.latent_dim, activation="softplus"))(recogn_map)
@@ -239,20 +259,15 @@ class STORNRecognitionModel:
 
         return recogn_stats, x_t, z_t
 
-    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None,
-              n_deep=6, dropout=0.0, activation="relu"):
+    def build(self, joint_shape, phase=Phases.train, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            self.train_recogn_stats, self.train_input, self.train_z_t = self._build(Phases.train, joint_shape,
-                                                                                    seq_shape=seq_shape,
-                                                                                    n_deep=n_deep,
-                                                                                    dropout=dropout,
-                                                                                    activation=activation)
+            self.train_recogn_stats, self.train_input, self.train_z_t = self._build(
+                Phases.train, joint_shape, seq_shape=seq_shape
+            )
         else:
-            self.predict_recogn_stats, self.predict_input, self.predict_z_t = self._build(Phases.predict, joint_shape,
-                                                                                          batch_size=batch_size,
-                                                                                          n_deep=n_deep,
-                                                                                          dropout=dropout,
-                                                                                          activation=activation)
+            self.predict_recogn_stats, self.predict_input, self.predict_z_t = self._build(
+                Phases.predict, joint_shape, batch_size=batch_size
+            )
 
     @staticmethod
     def do_sample(statistics, batch_size, dim_size):
@@ -273,7 +288,7 @@ class STORNRecognitionModel:
         return tuple(shape)
 
 
-class STORNStandardPriorModel:
+class STORNStandardPriorModel(object):
     def __init__(self, x_tm1, z_tm1):
         self.latent_dim = 64
         self.n_hidden_recurrent = 128

@@ -10,6 +10,7 @@ hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 logger.setLevel(logging.INFO)
 
+
 class ModelSelector:
     def __init__(self, model):
         self.model = model
@@ -33,3 +34,5 @@ class ModelSelector:
         logger.info("Best: %f using %s" % (result.best_score_, result.best_params_))
         for params, mean_score, scores in result.grid_scores_:
             logger.info("%f (%f) with: %r" % (scores.mean(), scores.std(), params))
+
+        return result
