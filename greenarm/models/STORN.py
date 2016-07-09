@@ -190,7 +190,6 @@ class STORNModel(object):
         logger.debug("Saving model to %s" % prefix)
 
         with codecs.open(prefix + ".json", "w", "UTF-8") as of:
-            print self.train_model.to_json()
             of.write(self.train_model.to_json())
 
         self.train_model.save_weights(prefix + ".weights.h5")
@@ -225,9 +224,9 @@ class STORNRecognitionModel(object):
 
     def _build(self, phase, joint_shape, seq_shape=None, batch_size=None):
         if phase == Phases.train:
-            x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float32")
+            x_t = Input(shape=(seq_shape, joint_shape), name="stornREC_input_train", dtype="float64")
         else:
-            x_t = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float32")
+            x_t = Input(batch_shape=(batch_size, 1, joint_shape), name="stornREC_input_predict", dtype="float64")
 
         recogn_input = x_t
         for i in range(self.n_deep):
