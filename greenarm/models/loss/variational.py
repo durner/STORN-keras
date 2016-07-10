@@ -28,7 +28,7 @@ def divergence(mu1, sigma1, mu2=0, sigma2=1):
     important.
     """
     term = K.mean(K.sum(K.log(sigma2 / sigma1) +
-                 ((K.square(sigma1) + K.square(mu1 - mu2)) / (2 * K.square(sigma2))) - 0.5, axis=-1))
+                        ((K.square(sigma1) + K.square(mu1 - mu2)) / (2 * K.square(sigma2))) - 0.5, axis=-1))
     return term
 
 
@@ -54,8 +54,9 @@ def gauss(x, mu, sigma):
     important.
     """
     nll = K.mean(0.5 * K.sum(K.square(x - mu) / K.square(sigma) + 2 * K.log(sigma) +
-                      K.log(2 * np.pi), axis=-1))
+                             K.log(2 * np.pi), axis=-1))
     return nll
+
 
 def keras_divergence(x, output_statistics):
     x_dim = 7
@@ -63,10 +64,11 @@ def keras_divergence(x, output_statistics):
     # and then 4*latent_dim, the mu, sigma of z|x, and mu, sigma of z (prior)
     latent_dim = (x.shape[-1] - x_dim * 2) / 4
     return divergence(output_statistics[:, :, 2 * x_dim:2 * x_dim + latent_dim],
-               output_statistics[:, :, 2 * x_dim + latent_dim:2 * x_dim + 2 * latent_dim],
-               output_statistics[:, :, 2 * x_dim + 2 * latent_dim: 2 * x_dim + 3 * latent_dim],
-               output_statistics[:, :, 2 * x_dim + 3 * latent_dim:],
-               )
+                      output_statistics[:, :, 2 * x_dim + latent_dim:2 * x_dim + 2 * latent_dim],
+                      output_statistics[:, :, 2 * x_dim + 2 * latent_dim: 2 * x_dim + 3 * latent_dim],
+                      output_statistics[:, :, 2 * x_dim + 3 * latent_dim:],
+                      )
+
 
 def keras_gauss(x, output_statistics):
     x_dim = 7
@@ -74,6 +76,7 @@ def keras_gauss(x, output_statistics):
     # and then 4*latent_dim, the mu, sigma of z|x, and mu, sigma of z (prior)
     x = x[:, :, :x_dim]
     return gauss(x, output_statistics[:, :, :x_dim], output_statistics[:, :, x_dim:2 * x_dim])
+
 
 def keras_variational(x, output_statistics):
     """
@@ -91,14 +94,25 @@ def keras_variational(x, output_statistics):
     # the output has 2*x_dim, the mu and sigma of x|z
     # and then 4*latent_dim, the mu, sigma of z|x, and mu, sigma of z (prior)
     latent_dim = (x.shape[-1] - x_dim * 2) / 4
-    x = x[:, :, :x_dim]
-    expect_term = gauss(x, output_statistics[:, :, :x_dim], output_statistics[:, :, x_dim:2 * x_dim])
+    x_stripped = x[:, :, :x_dim]
+    expect_term = gauss(x_stripped, output_statistics[:, :, :x_dim], output_statistics[:, :, x_dim:2 * x_dim])
     kl_term = divergence(output_statistics[:, :, 2 * x_dim:2 * x_dim + latent_dim],
                          output_statistics[:, :, 2 * x_dim + latent_dim:2 * x_dim + 2 * latent_dim],
                          output_statistics[:, :, 2 * x_dim + 2 * latent_dim: 2 * x_dim + 3 * latent_dim],
                          output_statistics[:, :, 2 * x_dim + 3 * latent_dim:],
                          )
     return kl_term + expect_term
+
+
+def mean_sigma(x, output_statistics):
+    sigma = output_statistics[:, :, 7:14]
+    return K.mean(sigma)
+
+
+def mu_minus_x(x, output_statistics):
+    x_stripped = x[:, :, :7]
+    mu = output_statistics[:, :, :7]
+    return K.mean(K.sum(K.square(x_stripped - mu), axis=-1))
 
 
 def gauss_mixture():
