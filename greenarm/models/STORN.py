@@ -11,6 +11,8 @@ from keras.engine import merge
 from keras.models import Model
 from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lambda
 from greenarm.models.loss.variational import keras_variational
+from greenarm.models.loss.variational import keras_gauss
+from greenarm.models.loss.variational import keras_divergence
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
 
@@ -27,7 +29,7 @@ class Phases:
 
 
 class STORNModel(object):
-    def __init__(self, latent_dim=7, n_hidden_dense=50, n_hidden_recurrent=128, n_deep=6, dropout=0, activation='relu',
+    def __init__(self, latent_dim=7, n_hidden_dense=50, n_hidden_recurrent=128, n_deep=6, dropout=0, activation='tanh',
                  with_trending_prior=False):
         # Tensor shapes
         self.data_dim = 7
@@ -128,7 +130,7 @@ class STORNModel(object):
         output = merge([gen_mu, gen_sigma, z_post_stats, z_prior_stats], mode='concat')
         inputs = [x_t, x_tm1] if self.with_trending_prior else [x_t, x_tm1, z_prior_stats]
         model = Model(input=inputs, output=output)
-        model.compile(optimizer='rmsprop', loss=keras_variational)
+        model.compile(optimizer='rmsprop', loss=keras_variational, metrics=[keras_gauss, keras_divergence])
 
         return model
 
@@ -162,7 +164,7 @@ class STORNModel(object):
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=20, verbose=1)
         try:
             # A workaround so that keras does not complain about target and pred shape mismatches
             padded_target = numpy.concatenate(
@@ -226,8 +228,8 @@ class STORNModel(object):
 
         logger.debug("Saving model to %s" % prefix)
 
-        with codecs.open(prefix + ".json", "w", "UTF-8") as of:
-            of.write(self.train_model.to_json())
+        # with codecs.open(prefix + ".json", "w", "UTF-8") as of:
+        #     of.write(self.train_model.to_json())
 
         self.train_model.save_weights(prefix + ".weights.h5")
         return prefix
