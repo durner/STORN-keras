@@ -13,6 +13,8 @@ from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lamb
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.loss.variational import keras_gauss
 from greenarm.models.loss.variational import keras_divergence
+from greenarm.models.loss.variational import mu_minus_x
+from greenarm.models.loss.variational import mean_sigma
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
 
@@ -130,7 +132,8 @@ class STORNModel(object):
         output = merge([gen_mu, gen_sigma, z_post_stats, z_prior_stats], mode='concat')
         inputs = [x_t, x_tm1] if self.with_trending_prior else [x_t, x_tm1, z_prior_stats]
         model = Model(input=inputs, output=output)
-        model.compile(optimizer='rmsprop', loss=keras_variational, metrics=[keras_gauss, keras_divergence])
+        model.compile(optimizer='rmsprop', loss=keras_variational,
+                      metrics=[keras_gauss, keras_divergence, mu_minus_x, mean_sigma])
 
         return model
 
@@ -206,8 +209,13 @@ class STORNModel(object):
 
         return self.predict_model.predict(pred_inputs, batch_size=_batch_size)[:n_sequences, :, :]
 
-    def predict(self, X):
-        return self.train_model.predict(X)
+    def predict(self, inputs):
+        n_sequences = inputs[0].shape[0]
+        seq_len = inputs[0].shape[1]
+        list_in = inputs[:]
+        if not self.with_trending_prior:
+            list_in.append(STORNPriorModel.standard_input(n_sequences, seq_len, self.latent_dim))
+        return self.train_model.predict(list_in)
 
     def evaluate(self, inputs, ground_truth):
         """
