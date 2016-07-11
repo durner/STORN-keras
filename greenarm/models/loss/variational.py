@@ -27,8 +27,8 @@ def divergence(mu1, sigma1, mu2=0, sigma2=1):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    term = K.mean(K.sum(K.log(sigma2 / sigma1) +
-                        ((K.square(sigma1) + K.square(mu1 - mu2)) / (2 * K.square(sigma2))) - 0.5, axis=-1))
+    term = K.sum(K.log(sigma2 / sigma1) +
+                 ((K.square(sigma1) + K.square(mu1 - mu2)) / (2 * K.square(sigma2))) - 0.5, axis=-1)
     return term
 
 
@@ -53,8 +53,8 @@ def gauss(x, mu, sigma):
     in the data batch, elements in the sequence) to make every point equally
     important.
     """
-    nll = K.mean(0.5 * K.sum(K.square(x - mu) / K.square(sigma) + 2 * K.log(sigma) +
-                             K.log(2 * np.pi), axis=-1))
+    nll = 0.5 * K.sum(K.square(x - mu) / K.square(sigma) + 2 * K.log(sigma) +
+                      K.log(2 * np.pi), axis=-1)
     return nll
 
 
@@ -63,11 +63,11 @@ def keras_divergence(x, output_statistics):
     # the output has 2*x_dim, the mu and sigma of x|z
     # and then 4*latent_dim, the mu, sigma of z|x, and mu, sigma of z (prior)
     latent_dim = (x.shape[-1] - x_dim * 2) / 4
-    return divergence(output_statistics[:, :, 2 * x_dim:2 * x_dim + latent_dim],
-                      output_statistics[:, :, 2 * x_dim + latent_dim:2 * x_dim + 2 * latent_dim],
-                      output_statistics[:, :, 2 * x_dim + 2 * latent_dim: 2 * x_dim + 3 * latent_dim],
-                      output_statistics[:, :, 2 * x_dim + 3 * latent_dim:],
-                      )
+    return K.mean(divergence(output_statistics[:, :, 2 * x_dim:2 * x_dim + latent_dim],
+                             output_statistics[:, :, 2 * x_dim + latent_dim:2 * x_dim + 2 * latent_dim],
+                             output_statistics[:, :, 2 * x_dim + 2 * latent_dim: 2 * x_dim + 3 * latent_dim],
+                             output_statistics[:, :, 2 * x_dim + 3 * latent_dim:],
+                             ))
 
 
 def keras_gauss(x, output_statistics):
@@ -75,7 +75,7 @@ def keras_gauss(x, output_statistics):
     # the output has 2*x_dim, the mu and sigma of x|z
     # and then 4*latent_dim, the mu, sigma of z|x, and mu, sigma of z (prior)
     x = x[:, :, :x_dim]
-    return gauss(x, output_statistics[:, :, :x_dim], output_statistics[:, :, x_dim:2 * x_dim])
+    return K.mean(gauss(x, output_statistics[:, :, :x_dim], output_statistics[:, :, x_dim:2 * x_dim]))
 
 
 def keras_variational(x, output_statistics):

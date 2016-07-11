@@ -124,16 +124,23 @@ class TimeSeriesPredictor(object):
 
         return self.predict_model.predict(x, batch_size=_batch_size)[:original_num_samples, :, :]
 
-    def evaluate(self, inputs, ground_truth):
+    def evaluate_online(self, inputs, ground_truth):
         """
         :param inputs: a list of inputs for the model. In this case, it's a
                        one element list.
         :param ground_truth: the expected value to compare to
-        :return: plotting artifacts: input, prediction, and error matrices
+        :return: plotting artifacts: prediction, and error matrices
         """
         x = inputs[-1]
         pred = self.predict_one_step(x)
-        return pred, (ground_truth - pred) ** 2
+        error = (ground_truth - pred) ** 2
+        return pred, np.mean(error, axis=-1)
+
+    def evaluate_offline(self, inputs, ground_truth):
+        x = inputs[-1]
+        pred = self.train_model.predict(x)
+        error = (ground_truth - pred) ** 2
+        return pred, np.mean(error, axis=-1)
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
