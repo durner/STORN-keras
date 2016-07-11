@@ -13,6 +13,7 @@ from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lamb
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.loss.variational import keras_gauss
 from greenarm.models.loss.variational import keras_divergence
+from greenarm.models.loss.variational import divergence
 from greenarm.models.loss.variational import mu_minus_x
 from greenarm.models.loss.variational import mean_sigma
 from greenarm.models.sampling.sampling import sample_gauss
@@ -132,8 +133,8 @@ class STORNModel(object):
         output = merge([gen_mu, gen_sigma, z_post_stats, z_prior_stats], mode='concat')
         inputs = [x_t, x_tm1] if self.with_trending_prior else [x_t, x_tm1, z_prior_stats]
         model = Model(input=inputs, output=output)
-        model.compile(optimizer='rmsprop', loss=keras_variational,
-                      metrics=[keras_gauss, keras_divergence, mu_minus_x, mean_sigma])
+        model.compile(optimizer='rmsprop', loss=keras_variational)
+        # metrics=[keras_gauss, keras_divergence, mu_minus_x, mean_sigma]
 
         return model
 
@@ -160,6 +161,7 @@ class STORNModel(object):
         if not self.with_trending_prior:
             list_in.append(STORNPriorModel.standard_input(n_sequences, seq_len, self.latent_dim))
         self.train_model = self._build(Phases.train, seq_shape=seq_len)
+        # self.train_model.load_weights("start_weights.h5")
 
         # Do a validation split of all the inputs
         split_idx = int((1. - validation_split) * n_sequences)
@@ -167,7 +169,7 @@ class STORNModel(object):
         train_target, valid_target = target[:split_idx], target[split_idx:]
 
         checkpoint = ModelCheckpoint("best_storn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=20, verbose=1)
+        early_stop = EarlyStopping(monitor='val_loss', patience=25, verbose=1)
         try:
             # A workaround so that keras does not complain about target and pred shape mismatches
             padded_target = numpy.concatenate(
@@ -209,15 +211,33 @@ class STORNModel(object):
 
         return self.predict_model.predict(pred_inputs, batch_size=_batch_size)[:n_sequences, :, :]
 
-    def predict(self, inputs):
-        n_sequences = inputs[0].shape[0]
-        seq_len = inputs[0].shape[1]
+    def evaluate_offline(self, inputs, target):
+        n_sequences = target.shape[0]
+        seq_len = target.shape[1]
+        data_dim = target.shape[2]
+        assert data_dim == self.data_dim
+
+        # prepare inputs
         list_in = inputs[:]
         if not self.with_trending_prior:
             list_in.append(STORNPriorModel.standard_input(n_sequences, seq_len, self.latent_dim))
-        return self.train_model.predict(list_in)
 
-    def evaluate(self, inputs, ground_truth):
+        # prepare target
+        padded_target = numpy.concatenate(
+            (target, numpy.zeros((n_sequences, seq_len, 4 * self.latent_dim + data_dim))),
+            axis=-1)
+
+        # get predictions
+        predictions = self.train_model.predict(list_in)
+
+        # compute loss based on predictions
+        x = K.placeholder(ndim=3, dtype="float32")
+        stats = K.placeholder(ndim=3, dtype="float32")
+        get_loss = K.function(inputs=[x, stats], outputs=keras_variational(x, stats))
+        loss = get_loss([padded_target, predictions])
+        return predictions[:, :, :data_dim], loss/18
+
+    def evaluate_online(self, inputs, ground_truth):
         """
         :param inputs: a list of inputs for the model. In this case, it's a
                        two element list.
@@ -225,7 +245,7 @@ class STORNModel(object):
         :return: plotting artifacts: input, prediction, and error
         """
         pred = self.predict_one_step(inputs)[:, :, :7]
-        return pred, (ground_truth - pred) ** 2
+        return pred, numpy.mean((ground_truth - pred) ** 2, axis=-1)
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
