@@ -9,10 +9,13 @@ from greenarm.util import get_logger, add_samples_until_divisible
 
 logger = get_logger(__name__)
 
+RecurrentLayer = GRU
 
 class TimeSeriesPredictor(object):
-    def __init__(self, n_deep=10, num_hidden_recurrent=128, num_hidden_dense=32, dropout=0, activation="sigmoid"):
-        self.n_deep = n_deep
+    def __init__(self, n_deep_dense=5, n_deep_dense_input=3, n_deep_recurrent=4, num_hidden_recurrent=128, num_hidden_dense=32, dropout=0, activation="sigmoid"):
+        self.n_deep_dense = n_deep_dense
+        self.n_deep_dense_input = n_deep_dense_input
+        self.n_deep_recurrent = n_deep_recurrent
         self.dropout = dropout
         self.activation = activation
         self.num_hidden_recurrent = num_hidden_recurrent
@@ -24,7 +27,9 @@ class TimeSeriesPredictor(object):
 
     def get_params(self, deep=True):
         return {
-            "n_deep": self.n_deep,
+            "n_deep_dense": self.n_deep_dense,
+            "n_deep_dense_input": self.n_deep_dense_input,
+            "n_deep_recurrent": self.n_deep_recurrent,
             "dropout": self.dropout,
             "activation": self.activation,
             "num_hidden_recurrent": self.num_hidden_recurrent,
@@ -48,26 +53,28 @@ class TimeSeriesPredictor(object):
         masked = Masking()(input_layer)
 
         x_in = masked
-        for i in range(self.n_deep):
+        for i in range(self.n_deep_dense_input):
             x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(x_in)
             if self.dropout != 0.0:
                 x_in = Dropout(self.dropout)(x_in)
+        deep = x_in
+        for i in range(self.n_deep_recurrent):
 
-        recurrent = SimpleRNN(
-            self.num_hidden_recurrent,
-            return_sequences=True,
-            stateful=phase == "predict",
-            dropout_W=self.dropout,
-            dropout_U=self.dropout,
-            init="glorot_normal"
-        )(x_in)
+            deep = RecurrentLayer(
+                self.num_hidden_recurrent,
+                return_sequences=True,
+                stateful=phase == "predict",
+                dropout_W=self.dropout,
+                dropout_U=self.dropout,
+                init="glorot_normal"
+            )(deep)
 
-        for i in range(self.n_deep):
-            recurrent = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(recurrent)
+        for i in range(self.n_deep_dense):
+            deep = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(deep)
             if self.dropout != 0.0:
-                recurrent = Dropout(self.dropout)(recurrent)
+                deep = Dropout(self.dropout)(deep)
 
-        output = TimeDistributed(Dense(7))(recurrent)
+        output = TimeDistributed(Dense(7))(deep)
 
         model = Model(input=input_layer, output=output)
         model.compile(optimizer='rmsprop', loss='mean_squared_error')
