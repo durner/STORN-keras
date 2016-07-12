@@ -73,7 +73,6 @@ class STORNModel(object):
         return self
 
     def _build(self, phase, seq_shape=None, batch_size=None):
-
         # Recognition model
         self.z_recognition_model = STORNRecognitionModel(self.data_dim, self.latent_dim, self.n_hidden_dense,
                                                          self.n_hidden_recurrent, self.n_deep, self.dropout,
