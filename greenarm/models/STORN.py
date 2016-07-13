@@ -18,6 +18,7 @@ from greenarm.models.loss.variational import mu_minus_x
 from greenarm.models.loss.variational import mean_sigma
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
+from heraspy.model import HeraModel
 
 logger = get_logger(__name__)
 
@@ -33,7 +34,7 @@ class Phases:
 
 class STORNModel(object):
     def __init__(self, latent_dim=7, n_hidden_dense=50, n_hidden_recurrent=128, n_deep=6, dropout=0, activation='tanh',
-                 with_trending_prior=False):
+                 with_trending_prior=False, spy_enabled=False):
         # Tensor shapes
         self.data_dim = 7
         self.latent_dim = latent_dim
@@ -54,6 +55,9 @@ class STORNModel(object):
         self.train_model = None
         self.predict_model = None
         self._weights_updated = False
+
+        # Misc
+        self.spy_enabled = spy_enabled
 
     def get_params(self):
         return {
@@ -177,10 +181,15 @@ class STORNModel(object):
             padded_valid_target = numpy.concatenate(
                 (valid_target, numpy.zeros((valid_target.shape[0], seq_len, 4 * self.latent_dim + self.data_dim))),
                 axis=-1)
+
+            callbacks = [checkpoint, early_stop]
+            if self.spy_enabled:
+                hera_spy = HeraModel({'id': 'STORN'}, {'domain': 'localhost', 'port': 4000})
+                callbacks = callbacks + [hera_spy.callback]
             self.train_model.fit(
                 train_input, padded_target,
                 validation_data=(valid_input, [padded_valid_target]),
-                callbacks=[checkpoint, early_stop],
+                callbacks=callbacks,
                 nb_epoch=max_epochs
             )
         except KeyboardInterrupt:
@@ -234,7 +243,7 @@ class STORNModel(object):
         stats = K.placeholder(ndim=3, dtype="float32")
         get_loss = K.function(inputs=[x, stats], outputs=keras_variational(x, stats))
         loss = get_loss([padded_target, predictions])
-        return predictions[:, :, :data_dim], loss/18
+        return predictions[:, :, :data_dim], loss / 18
 
     def evaluate_online(self, inputs, ground_truth):
         """
