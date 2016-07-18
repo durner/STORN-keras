@@ -1,14 +1,23 @@
+from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.models import Model
+from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lambda, Masking, merge, SimpleRNN
+from greenarm.util import get_logger
+import time
+
+logger = get_logger(__name__)
 
 # Basic idea: run the data through the STORN model, and get back
 #   - error (KL especially)
 #   - prediction
 # Combine this with the original data, and feed an RNN a concat-merge of these
 
+RecurrentLayer = SimpleRNN
+
 
 class RNNAnomalyDetector(object):
     def __init__(
-            self, n_deep_dense_input=1, num_hidden_dense=128, n_deep_recurrent=2, num_hidden_recurrent=128,
-            n_deep_dense=2, activation="tanh", dropout=0.3
+            self, n_deep_dense_input=0, num_hidden_dense=64, n_deep_recurrent=1, num_hidden_recurrent=30,
+            n_deep_dense=0, activation="tanh", dropout=0.3
     ):
         self.n_deep_dense_input = n_deep_dense_input
         self.num_hidden_dense = num_hidden_dense
@@ -21,20 +30,24 @@ class RNNAnomalyDetector(object):
         self.model = None
 
     def build_model(self, time_series_input_dims, predictor_output_dims, maxlen=None):
-        ts_input_layer = Input(shape=(maxlen, time_series_input_dims))
-        ts_masked = Masking()(ts_input_layer)
+        # ts_input_layer = Input(shape=(maxlen, time_series_input_dims))
+        # ts_masked = Masking()(ts_input_layer)
         pred_input_layer = Input(shape=(maxlen, predictor_output_dims))
         pred_masked = Masking()(pred_input_layer)
 
-        input_layer = merge([ts_masked, pred_masked], mode="concat")
+        # input_layer = merge([ts_masked, pred_masked], mode="concat")
 
-        x_in = input_layer
+        #x_in = input_layer
+
+        x_in = pred_masked
 
         for i in range(self.n_deep_dense_input):
             x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(x_in)
             if self.dropout != 0.0:
                 x_in = Dropout(self.dropout)(x_in)
+
         deep = x_in
+
         for i in range(self.n_deep_recurrent):
             is_last_recurrent = i == (self.n_deep_recurrent - 1)
             deep = RecurrentLayer(
@@ -53,8 +66,9 @@ class RNNAnomalyDetector(object):
 
         output = Dense(1, activation="sigmoid")(deep)
 
-        model = Model(input=[ts_input_layer, pred_input_layer], output=output)
-        model.compile(optimizer='rmsprop', loss='binary_crossentropy')
+        # model = Model(input=[ts_input_layer, pred_input_layer], output=output)
+        model = Model(input=[pred_input_layer], output=output)
+        model.compile(optimizer='rmsprop', loss='mse', metrics=['acc'])
         return model
 
     def train(self, x_sequence_data, x_predictor_output, Y, validation_split=0.1, max_epochs=1000):
@@ -70,25 +84,31 @@ class RNNAnomalyDetector(object):
 
         Y, Y_val = Y[:split_idx], Y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=150, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor='val_acc', patience=150, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
+            # self.model.fit(
+            #     [x_sequence_data, x_predictor_output], Y,
+            #     nb_epoch=max_epochs, validation_data=([x_sequence_data_val, x_predictor_output_val], Y_val),
+            #     callbacks=[checkpoint, early_stop]
+            # )
             self.model.fit(
-                [x_sequence_data, x_predictor_output], Y,
-                nb_epoch=max_epochs, validation_data=([x_sequence_data_val, x_predictor_output_val], Y_val),
+                [x_predictor_output], Y,
+                nb_epoch=max_epochs, validation_data=([x_predictor_output_val], Y_val),
                 callbacks=[checkpoint, early_stop]
             )
 
         except KeyboardInterrupt:
-            logger.debug("Trianing interrupted! Restoring best weights and saving..")
+            logger.debug("Training interrupted! Restoring best weights and saving..")
 
         self.model.load_weights("best_anomaly_weights.h5")
         self._weights_updated = True
         self.save()
 
     def predict(self, x_sequence_data, x_predictor_output):
-        return self.model.predict([x_sequence_data, x_predictor_output]) > 0.5
+        # return self.model.predict([x_sequence_data, x_predictor_output]) > 0.5
+        return self.model.predict([x_predictor_output]) > 0.5
 
     def save(self, prefix=None):
         if prefix is None:
