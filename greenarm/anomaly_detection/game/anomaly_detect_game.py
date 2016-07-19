@@ -46,7 +46,8 @@ class AnomalyDetection(Game):
     def play(self, action):
         assert action in range(2), "Invalid action."
 
-        self.clear_old_anomalies()
+        if self.anomalies_to_detect_buffer:
+            self.clear_old_anomalies()
 
         if action == 0:
             self.execute_idle()
@@ -59,29 +60,32 @@ class AnomalyDetection(Game):
             if self.is_won():
                 if self.num_spotted_correctly == 0:
                     self.score += ALL_CORRECT_NO_ANOMALIES_SCORE
+                    logger.debug("All correct, no anomalies!")
                 else:
                     self.score += ALL_CORRECT_SCORE
+                    logger.debug("All correct!")
 
     def clear_old_anomalies(self):
         self.anomalies_to_detect_buffer = [
             anomaly for anomaly in self.anomalies_to_detect_buffer
-            if anomaly > (self.current_timestamp + self.valid_window[0])
+            if self.current_timestamp < (anomaly + self.valid_window[1])
+            # if anomaly > (self.current_timestamp + self.valid_window[1])
         ]
 
     def current_timestamp_is_anomalous(self):
         if not self.anomalies_to_detect_buffer:
             return False
 
-        start = self.anomalies_to_detect_buffer[0] + self.valid_window[0]
-        end = self.anomalies_to_detect_buffer[0] + self.valid_window[1]
+        start = int(self.anomalies_to_detect_buffer[0] + self.valid_window[0])
+        end = int(self.anomalies_to_detect_buffer[0] + self.valid_window[1])
         return start <= self.current_timestamp < end
 
     def current_timestamp_is_last_anomalous(self):
         if not self.anomalies_to_detect_buffer:
             return False
 
-        end = self.anomalies_to_detect_buffer[0] + self.valid_window[1]
-        return self.current_timestamp == end - 1
+        end = int(self.anomalies_to_detect_buffer[0]) + self.valid_window[1]
+        return self.current_timestamp == end
 
     def execute_idle(self):
         if self.current_timestamp_is_last_anomalous():
@@ -144,6 +148,5 @@ class AnomalyDetection(Game):
             return False
 
     def is_won(self):
-        num_spotted_correctly = self.num_spotted_correctly
-        num_spotted_incorrectly = num_spotted_correctly - len(self.detected_anomalies)
-        return num_spotted_correctly == len(self.anomalies_to_detect) and num_spotted_incorrectly == 0
+        num_spotted_incorrectly = len(self.detected_anomalies) - self.num_spotted_correctly
+        return self.num_spotted_correctly == len(self.anomalies_to_detect) and num_spotted_incorrectly == 0
