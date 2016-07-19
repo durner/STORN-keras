@@ -73,17 +73,19 @@ def print_eval(predicted, ground_truth):
     logger.debug("F1: %s" % ((2. * P * R) / (P + R)))
 
 
-def pad_sequences_3d(sequences, maxlen, return_paddings=False, force_dims=None):
-    data_dimensionality = force_dims or sequences[0].shape[-1]
+def pad_sequences_3d(sequences, maxlen, return_paddings=False, skip_first_n_dims=0):
+    data_dimensionality = sequences[0].shape[-1] - skip_first_n_dims
     data = np.zeros(shape=(len(sequences), maxlen, data_dimensionality), dtype="float32")
-    # zero padding needs to be done manually here, apparently
+
     paddings = []
     for sample_index, sample in enumerate(sequences):
         if maxlen >= sample.shape[0]:
-            data[sample_index] = np.vstack((np.zeros((maxlen - sample.shape[0], data_dimensionality)), sample[:, 1:]))
+            data[sample_index] = np.vstack(
+                (np.zeros((maxlen - sample.shape[0], data_dimensionality)), sample[:, skip_first_n_dims:])
+            )
             paddings.append(maxlen - sample.shape[0])
         else:
-            data[sample_index] = sample[:maxlen, 1:]
+            data[sample_index] = sample[:maxlen, skip_first_n_dims:]
             paddings.append(0)
 
     if return_paddings:

@@ -37,9 +37,9 @@ class ReinforcementLearningAnomalyDetector(object):
 
     def build_model(self, input_dims, maxlen=None):
         if self.recurrent:
-            input_layer = Input(shape=(maxlen, input_dims))
-            input_layer = Masking()(input_layer)
-            x_in = input_layer
+            input_layer = Input(shape=(1, maxlen, input_dims))
+            masked = Masking()(input_layer)
+            x_in = masked
 
             for i in range(self.n_deep_dense_input):
                 x_in = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))()
@@ -66,7 +66,7 @@ class ReinforcementLearningAnomalyDetector(object):
 
             output = Dense(2)(deep)
         else:
-            input_layer = Input(shape=(input_dims, 1))
+            input_layer = Input(shape=(1, input_dims))
             flat = Flatten()(input_layer)
 
             x_in = flat
@@ -93,7 +93,7 @@ class ReinforcementLearningAnomalyDetector(object):
 
         y, y_val = y[:split_idx], y[split_idx:]
 
-        anomaly_game = AnomalyDetection(x, y, valid_window=(-5, 10), sequence_like_states=self.recurrent)
+        anomaly_game = AnomalyDetection(x, y, valid_window=(0, 33), sequence_like_states=self.recurrent)
         self.agent = Agent(self.model, memory_size=-1, nb_frames=None)  # TODO figure out memory vs nb_frames
 
         try:
@@ -111,7 +111,7 @@ class ReinforcementLearningAnomalyDetector(object):
 
     def evaluate(self, x, y, return_detections=False):
         val_game = AnomalyDetection(x, y, valid_window=(-5, 10), sequence_like_states=self.recurrent)
-        self.agent.play(val_game, nb_epoch=1, visualize=False)
+        self.agent.play(val_game, nb_epoch=x.shape[0], visualize=False)
 
         accuracy = float(val_game.num_spotted_correctly) / sum([len(y_row) for y_row in y])
         if return_detections:
@@ -120,9 +120,9 @@ class ReinforcementLearningAnomalyDetector(object):
 
     def predict_coarse(self, x):
         game = AnomalyDetection(
-            x, np.array([[]] * x.shape[0]), valid_window=(-5, 10), sequence_like_states=self.recurrent
+            x, [np.array([])] * x.shape[0], valid_window=(-5, 10), sequence_like_states=self.recurrent
         )
-        self.agent.play(game, nb_epoch=1, visualize=False)
+        self.agent.play(game, nb_epoch=x.shape[0], visualize=False)
         res = np.zeros(shape=(x.shape[0],))
         for i in range(x.shape[0]):
             if game.detected_anomalies[i]:
