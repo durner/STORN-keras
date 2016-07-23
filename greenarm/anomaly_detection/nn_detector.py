@@ -22,16 +22,16 @@ class NNAnomalyDetector(object):
     @staticmethod
     def build_model(seq_len=None):
         model = Sequential()
-        model.add(Dense(64, input_shape=(seq_len,)))
+        model.add(Dense(200, input_shape=(seq_len,)))
         model.add(Activation("relu"))
-        model.add(Dense(16))
+        model.add(Dense(5))
         model.add(Activation("relu"))
         model.add(Dense(output_dim=1))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
+        model.compile(optimizer='sgd', loss='binary_crossentropy', metrics=['acc'])
         return model
 
-    def train(self, X, y, validation_split=0.1, max_epochs=800):
+    def train(self, X, y, validation_split=0.1, max_epochs=2000):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
@@ -45,7 +45,7 @@ class NNAnomalyDetector(object):
         y_train, y_val = y[:split_idx], y[split_idx:]
 
         checkpoint = ModelCheckpoint("best_anomaly_nn_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_acc', patience=150, verbose=1)
+        early_stop = EarlyStopping(monitor='val_acc', patience=700, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
