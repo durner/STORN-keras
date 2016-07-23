@@ -109,8 +109,8 @@ class STORNModel(object):
         # Generative model
         # Fix of keras/engine/topology.py required!
         # Otherwise concat with masked and non masked layer returns an error!
-        masked = Masking()(x_tm1)
-        gen_input = merge(inputs=[masked, z_t], mode='concat')
+        # masked = Masking()(x_tm1)
+        gen_input = merge(inputs=[x_tm1, z_t], mode='concat')
 
         for i in range(self.n_deep):
             gen_input = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(gen_input)
@@ -309,7 +309,7 @@ class STORNRecognitionModel(object):
 
         # Fix of keras/engine/topology.py required!
         # Otherwise concat with masked and non masked layer returns an error!
-        recogn_input = Masking()(x_t)
+        recogn_input = x_t
 
         for i in range(self.n_deep):
             recogn_input = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(recogn_input)
