@@ -15,7 +15,7 @@ class RNNAnomalyDetector(object):
     the STORN model.
     """
 
-    def __init__(self, n_deep=4, num_hidden_dense=64, num_hidden_recurrent=32,
+    def __init__(self, n_deep=1, num_hidden_dense=4, num_hidden_recurrent=4,
                  activation="relu", dropout=0.0):
 
         # Network configuration
