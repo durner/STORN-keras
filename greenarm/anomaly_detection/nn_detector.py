@@ -22,7 +22,7 @@ class NNAnomalyDetector(object):
     @staticmethod
     def build_model(seq_len=None):
         model = Sequential()
-        model.add(Dense(128, input_shape=(seq_len,)))
+        model.add(Dense(64, input_shape=(seq_len,)))
         model.add(Activation("relu"))
         model.add(Dense(16))
         model.add(Activation("relu"))
