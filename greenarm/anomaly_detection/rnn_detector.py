@@ -1,11 +1,11 @@
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.models import Model
-from keras.layers import Input, TimeDistributed, Dense, Dropout, Masking, SimpleRNN
+from keras.layers import Input, TimeDistributed, Dense, Dropout, Masking, GRU
 from greenarm.util import get_logger
 import time
 
 logger = get_logger(__name__)
-RecurrentLayer = SimpleRNN
+RecurrentLayer = GRU
 
 
 class RNNAnomalyDetector(object):
@@ -15,18 +15,17 @@ class RNNAnomalyDetector(object):
     the STORN model.
     """
 
-    def __init__(self, n_deep_dense_input=0, num_hidden_dense=64,
-                 n_deep_recurrent=1, num_hidden_recurrent=32,
-                 n_deep_dense=0, activation="tanh", dropout=0.0):
+    def __init__(self, n_deep=4, num_hidden_dense=64, num_hidden_recurrent=32,
+                 activation="relu", dropout=0.0):
 
-        self.n_deep_dense_input = n_deep_dense_input
-        self.num_hidden_dense = num_hidden_dense
-        self.num_hidden_recurrent = num_hidden_recurrent
-        self.n_deep_recurrent = n_deep_recurrent
-        self.n_deep_dense = n_deep_dense
+        # Network configuration
+        self.n_deep = n_deep
+        self.n_hidden_dense = num_hidden_dense
+        self.n_hidden_recurrent = num_hidden_recurrent
         self.activation = activation
         self.dropout = dropout
 
+        # Object state
         self.model = None
 
     def build_model(self, seq_len=None):
@@ -35,18 +34,18 @@ class RNNAnomalyDetector(object):
 
         # deep feature extraction for the loss
         deep = masked_input
-        for i in range(self.n_deep_dense_input):
-            deep = TimeDistributed(Dense(self.num_hidden_dense, activation=self.activation))(deep)
+        for i in range(self.n_deep):
+            deep = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(deep)
             if self.dropout != 0.0:
                 deep = Dropout(self.dropout)(deep)
 
         # RNN node to process the loss time-series
-        rnn = RecurrentLayer(self.num_hidden_recurrent, return_sequences=False, stateful=False)(deep)
+        rnn = RecurrentLayer(self.n_hidden_recurrent, return_sequences=False, stateful=False)(deep)
 
         # deep feature extraction for the RNN output
         output = rnn
-        for i in range(self.n_deep_dense):
-            output = Dense(self.num_hidden_dense, activation=self.activation)(output)
+        for i in range(self.n_deep):
+            output = Dense(self.n_hidden_dense, activation=self.activation)(output)
             if self.dropout != 0.0:
                 output = Dropout(self.dropout)(output)
 
@@ -59,7 +58,7 @@ class RNNAnomalyDetector(object):
         model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
         return model
 
-    def train(self, X, y, validation_split=0.1, max_epochs=1000):
+    def train(self, X, y, validation_split=0.1, max_epochs=100):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
 

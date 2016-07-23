@@ -1,13 +1,14 @@
 """
 Implementation of the STORN model from the paper.
 """
-import numpy
+import logging
+import numpy as np
 import time
 import keras.backend as K
 from keras.callbacks import ModelCheckpoint, EarlyStopping, RemoteMonitor
 from keras.engine import merge
 from keras.models import Model
-from keras.layers import  Masking
+from keras.layers import Masking
 from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU
 from greenarm.models.keras_fix.lambdawithmasking import LambdaWithMasking
 from greenarm.models.loss.variational import keras_variational
@@ -173,11 +174,11 @@ class STORNModel(object):
         early_stop = EarlyStopping(monitor='val_loss', patience=25, verbose=1)
         try:
             # A workaround so that keras does not complain about target and pred shape mismatches
-            padded_target = numpy.concatenate(
-                (train_target, numpy.zeros((train_target.shape[0], seq_len, 4 * self.latent_dim + data_dim))),
+            padded_target = np.concatenate(
+                (train_target, np.zeros((train_target.shape[0], seq_len, 4 * self.latent_dim + data_dim))),
                 axis=-1)
-            padded_valid_target = numpy.concatenate(
-                (valid_target, numpy.zeros((valid_target.shape[0], seq_len, 4 * self.latent_dim + self.data_dim))),
+            padded_valid_target = np.concatenate(
+                (valid_target, np.zeros((valid_target.shape[0], seq_len, 4 * self.latent_dim + self.data_dim))),
                 axis=-1)
 
             callbacks = [checkpoint, early_stop]
@@ -229,8 +230,8 @@ class STORNModel(object):
             list_in.append(STORNPriorModel.standard_input(n_sequences, seq_len, self.latent_dim))
 
         # prepare target
-        padded_target = numpy.concatenate(
-            (target, numpy.zeros((n_sequences, seq_len, 4 * self.latent_dim + data_dim))),
+        padded_target = np.concatenate(
+            (target, np.zeros((n_sequences, seq_len, 4 * self.latent_dim + data_dim))),
             axis=-1)
 
         # get predictions
@@ -251,7 +252,7 @@ class STORNModel(object):
         :return: plotting artifacts: input, prediction, and error
         """
         pred = self.predict_one_step(inputs)[:, :, :7]
-        return pred, numpy.mean((ground_truth - pred) ** 2, axis=-1)
+        return pred, np.mean((ground_truth - pred) ** 2, axis=-1)
 
     def reset_predict_model_states(self):
         self.predict_model.reset_states()
@@ -417,12 +418,36 @@ class STORNPriorModel(object):
 
     @staticmethod
     def standard_input(number_of_series, seq_len, latent_dim):
-        sigma = numpy.ones(
+        sigma = np.ones(
             (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
-        my = numpy.zeros(
+        my = np.zeros(
             (number_of_series, seq_len, latent_dim),
             dtype="float32"
         )
-        return numpy.concatenate([my, sigma], axis=-1)
+        return np.concatenate([my, sigma], axis=-1)
+
+
+def run_storn_grid_search(inputs, target, test_inputs, test_target):
+    """
+    STORN is not compatible with the sklearn grid search, so we need
+    to do a basic grid search ourselves.
+    I'll use a standard holdout instead of cross validation, since
+    cross validation is very expensive (STORN trains slowly).
+    """
+    hdlr = logging.FileHandler('results/grid_search/storn_grid.log')
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    hdlr.setFormatter(formatter)
+    logger.addHandler(hdlr)
+    logger.setLevel(logging.INFO)
+
+    deep = [0, 4, 8]
+    latent = [16, 32, 64]
+    for n_deep in deep:
+        for latent_dim in latent:
+            storn = STORNModel(activation='tanh', n_deep=n_deep, with_trending_prior=True, latent_dim=latent_dim,
+                               n_hidden_dense=64)
+            storn.fit(inputs, target, max_epochs=600)
+            _, err = storn.evaluate_offline(test_inputs, test_target)
+            logger.info("deep: %d, latent: %d, loss: %f" % (n_deep, latent_dim, np.mean(err)))
