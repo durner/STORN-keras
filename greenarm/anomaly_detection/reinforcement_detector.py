@@ -2,7 +2,7 @@ from qlearning4k import Agent
 import numpy as np
 
 from keras.models import Model
-from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lambda, Masking, merge, SimpleRNN, Flatten
+from keras.layers import Input, TimeDistributed, Dense, Dropout, Masking, SimpleRNN, Flatten
 
 from greenarm.anomaly_detection.game.anomaly_detect_game import AnomalyDetection
 from greenarm.util import get_logger

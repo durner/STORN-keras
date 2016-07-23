@@ -2,9 +2,11 @@ import time
 
 import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout, SimpleRNN
+from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout
 from keras.models import Model
+from keras.wrappers.scikit_learn import KerasRegressor
 
+from greenarm.models.grid_search.keras_grid import ModelSelector
 from greenarm.util import get_logger, add_samples_until_divisible
 
 logger = get_logger(__name__)
@@ -12,7 +14,8 @@ logger = get_logger(__name__)
 RecurrentLayer = GRU
 
 class TimeSeriesPredictor(object):
-    def __init__(self, n_deep_dense=5, n_deep_dense_input=3, n_deep_recurrent=4, num_hidden_recurrent=128, num_hidden_dense=32, dropout=0, activation="sigmoid"):
+    def __init__(self, n_deep_dense=5, n_deep_dense_input=3, n_deep_recurrent=4, num_hidden_recurrent=128,
+                 num_hidden_dense=32, dropout=0, activation="sigmoid"):
         self.n_deep_dense = n_deep_dense
         self.n_deep_dense_input = n_deep_dense_input
         self.n_deep_recurrent = n_deep_recurrent
@@ -59,7 +62,6 @@ class TimeSeriesPredictor(object):
                 x_in = Dropout(self.dropout)(x_in)
         deep = x_in
         for i in range(self.n_deep_recurrent):
-
             deep = RecurrentLayer(
                 self.num_hidden_recurrent,
                 return_sequences=True,
@@ -163,3 +165,17 @@ class TimeSeriesPredictor(object):
 
         self.train_model.save_weights(prefix + ".weights.h5")
         return prefix
+
+
+def run_tsp_grid_search(inputs, target):
+    def model_build_fn(n_deep=3, activation='relu', dropout=0):
+        tsp = TimeSeriesPredictor(n_deep=n_deep, activation=activation, dropout=dropout)
+        return tsp._build_model(maxlen=inputs.shape[1],
+                                phase='train')
+    selector = ModelSelector(KerasRegressor(build_fn=model_build_fn))
+    param_grid = {
+        'n_deep': [0, 5, 10],
+        'activation': ['relu', 'tanh', 'sigmoid'],
+        'dropout': [0, 0.2]
+    }
+    selector.score_hyper_params(inputs, target, param_grid=param_grid)
