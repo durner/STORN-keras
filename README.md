@@ -11,7 +11,7 @@ Required packages:
  Changes for Masked Layer Merge building on top of keras 1.0.6
  file: keras/engine/topology.py, method: compute_mask, line: 1349
 
- """{py}
+ ```{py}
     def compute_mask(self, inputs, mask=None):
         if mask is None or all([m is None for m in mask]):
             return None
@@ -46,4 +46,4 @@ Required packages:
         else:
             # this should have been caught earlier
             raise Exception('Invalid merge mode: {}'.format(self.mode))
-"""
+ ```
