@@ -5,6 +5,8 @@ Required packages:
  - theano >= 0.8.2
  - numpy >= 1.11.0
  - scipy >= 0.17.1
+ - h5py = 2.6.0
+ - hdf5 = 1.8.16
  - heraspy (optional)
 
 
