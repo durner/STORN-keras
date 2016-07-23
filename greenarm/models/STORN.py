@@ -11,14 +11,8 @@ from keras.engine import merge
 from keras.models import Model
 from keras.layers import  Masking
 from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, Lambda
-
 from greenarm.models.keras_fix.lambdawithmasking import LambdaWithMasking
 from greenarm.models.loss.variational import keras_variational
-from greenarm.models.loss.variational import keras_gauss
-from greenarm.models.loss.variational import keras_divergence
-from greenarm.models.loss.variational import divergence
-from greenarm.models.loss.variational import mu_minus_x
-from greenarm.models.loss.variational import mean_sigma
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
 from heraspy.model import HeraModel
