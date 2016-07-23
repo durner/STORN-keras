@@ -7,8 +7,8 @@ from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, LSTM, Lamb
 from greenarm.anomaly_detection.game.anomaly_detect_game import AnomalyDetection
 from greenarm.util import get_logger
 import time
-logger = get_logger(__name__)
 
+logger = get_logger(__name__)
 
 # Basic idea: run the data through the STORN model, and get back
 #   - error (KL especially)

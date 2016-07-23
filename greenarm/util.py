@@ -62,9 +62,10 @@ def print_eval(predicted, ground_truth):
                 fn += 1.
             else:
                 fp += 1.
-    P = (tp / tp + fp)
-    R = (tp / tp + fn)
-    logger.debug("Total: %s. Positives: %s. Negatives: %s" % (total, predicted.sum(), total - predicted.sum()))
+    P = (tp / (tp + fp))
+    R = (tp / (tp + fn))
+    logger.debug("Total: %s. Positives: %s. Negatives: %s" % (total, ground_truth.sum(), total - ground_truth.sum()))
+    logger.debug("Predicted: Positives: %s. Negatives: %s" % (predicted.sum(), total - predicted.sum()))
     logger.debug("TP: %s. FP: %s. TN: %s. FN: %s." % (tp, fp, tn, fn))
     logger.debug("Accuracy: %s" % (corrects / float(total)))
     logger.debug("Precision: %s" % P)
