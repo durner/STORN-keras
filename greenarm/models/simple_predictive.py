@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout, SimpleRNN
+from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout
 from keras.models import Model
 
 from greenarm.util import get_logger, add_samples_until_divisible

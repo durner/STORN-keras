@@ -1,21 +1,18 @@
 """
 Implementation of the STORN model from the paper.
 """
-import codecs
-
 import numpy
 import time
 import keras.backend as K
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.callbacks import ModelCheckpoint, EarlyStopping, RemoteMonitor
 from keras.engine import merge
 from keras.models import Model
 from keras.layers import  Masking
-from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, Lambda
+from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU
 from greenarm.models.keras_fix.lambdawithmasking import LambdaWithMasking
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
-from heraspy.model import HeraModel
 
 logger = get_logger(__name__)
 
@@ -31,7 +28,7 @@ class Phases:
 
 class STORNModel(object):
     def __init__(self, latent_dim=7, n_hidden_dense=50, n_hidden_recurrent=128, n_deep=6, dropout=0, activation='tanh',
-                 with_trending_prior=False, spy_enabled=False):
+                 with_trending_prior=False, monitor=False):
         # Tensor shapes
         self.data_dim = 7
         self.latent_dim = latent_dim
@@ -54,7 +51,7 @@ class STORNModel(object):
         self._weights_updated = False
 
         # Misc
-        self.spy_enabled = spy_enabled
+        self.monitor = monitor
 
     def get_params(self):
         return {
@@ -184,9 +181,9 @@ class STORNModel(object):
                 axis=-1)
 
             callbacks = [checkpoint, early_stop]
-            if self.spy_enabled:
-                hera_spy = HeraModel({'id': 'STORN'}, {'domain': 'localhost', 'port': 4000})
-                callbacks = callbacks + [hera_spy.callback]
+            if self.monitor:
+                monitor = RemoteMonitor(root='http://localhost:9000')
+                callbacks = callbacks + [monitor]
             self.train_model.fit(
                 train_input, padded_target,
                 validation_data=(valid_input, [padded_valid_target]),
