@@ -12,9 +12,7 @@ logger = get_logger(__name__)
 
 class MaxAnomalyDetector(object):
     """
-    The NN Anomaly Detector is trained on a
-    1 dimensional array of the loss value of
-    the STORN model.
+    The Max Anomaly Detector is trained on a 1 dimensional array of the loss value of the STORN model.
     """
 
     def __init__(self):
