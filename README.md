@@ -7,6 +7,7 @@ Required packages:
  - scipy >= 0.17.1
  - h5py = 2.6.0
  - hdf5 = 1.8.16
+ - [hualos](https://github.com/fchollet/hualos) (optional monitoring)
 
 
  Changes for Masked Layer Merge building on top of keras 1.0.6
