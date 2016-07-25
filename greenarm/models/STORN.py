@@ -95,8 +95,7 @@ class STORNModel(object):
         if self.with_trending_prior:
             z_tm1 = LambdaWithMasking(STORNModel.shift_z, output_shape=self.shift_z_output_shape)(z_t)
             self.z_prior_model = STORNPriorModel(self.latent_dim, self.with_trending_prior,
-                                                 n_hidden_recurrent=self.n_hidden_recurrent,
-                                                 x_tm1=x_tm1, z_tm1=z_tm1)
+                                                 n_hidden_recurrent=self.n_hidden_recurrent, x_tm1=x_tm1, z_tm1=z_tm1)
         else:
             self.z_prior_model = STORNPriorModel(self.latent_dim, self.with_trending_prior)
 
@@ -108,9 +107,13 @@ class STORNModel(object):
             z_prior_stats = self.z_prior_model.predict_prior_stats
 
         # Generative model
-        # Fix of keras/engine/topology.py required!
+
+        # Fix of keras/engine/topology.py required for masked layer!
         # Otherwise concat with masked and non masked layer returns an error!
         # masked = Masking()(x_tm1)
+        # gen_input = merge(inputs=[masked, z_t], mode='concat')
+
+        # Unmasked Layer
         gen_input = merge(inputs=[x_tm1, z_t], mode='concat')
 
         for i in range(self.n_deep):
@@ -119,9 +122,7 @@ class STORNModel(object):
                 gen_input = Dropout(self.dropout)(gen_input)
 
         rnn_gen = RecurrentLayer(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
-                                 consume_less='gpu')(
-            gen_input)
-
+                                 consume_less='gpu')(gen_input)
         gen_map = rnn_gen
         for i in range(self.n_deep):
             gen_map = TimeDistributed(Dense(self.n_hidden_dense, activation=self.activation))(gen_map)
@@ -186,12 +187,8 @@ class STORNModel(object):
             if self.monitor:
                 monitor = RemoteMonitor(root='http://localhost:9000')
                 callbacks = callbacks + [monitor]
-            self.train_model.fit(
-                train_input, padded_target,
-                validation_data=(valid_input, [padded_valid_target]),
-                callbacks=callbacks,
-                nb_epoch=max_epochs
-            )
+            self.train_model.fit(train_input, padded_target, validation_data=(valid_input, [padded_valid_target]),
+                                 callbacks=callbacks, nb_epoch=max_epochs)
         except KeyboardInterrupt:
             logger.debug("Training interrupted! Restoring best weights and saving..")
 
@@ -308,9 +305,13 @@ class STORNRecognitionModel(object):
         else:
             x_t = Input(batch_shape=(batch_size, 1, self.data_dim), name="stornREC_input_predict", dtype="float32")
 
-        # Fix of keras/engine/topology.py required!
+        # Recognition model
+
+        # Fix of keras/engine/topology.py required for masked layer!
         # Otherwise concat with masked and non masked layer returns an error!
         # recogn_input = Masking()(x_t)
+
+        # Unmasked Layer
         recogn_input = x_t
 
         for i in range(self.n_deep):
@@ -318,11 +319,8 @@ class STORNRecognitionModel(object):
             if self.dropout != 0.0:
                 recogn_input = Dropout(self.dropout)(recogn_input)
 
-        recogn_rnn = RecurrentLayer(self.n_hidden_recurrent,
-                                    return_sequences=True,
-                                    stateful=(phase == Phases.predict),
-                                    consume_less='gpu')(
-            recogn_input)
+        recogn_rnn = RecurrentLayer(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
+                                    consume_less='gpu')(recogn_input)
 
         recogn_map = recogn_rnn
         for i in range(self.n_deep):
