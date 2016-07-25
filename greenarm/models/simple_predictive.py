@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 
 RecurrentLayer = GRU
 
+
 class TimeSeriesPredictor(object):
     def __init__(self, n_deep_dense=5, n_deep_dense_input=3, n_deep_recurrent=4, num_hidden_recurrent=128,
                  num_hidden_dense=32, dropout=0, activation="sigmoid"):
@@ -171,6 +172,7 @@ def run_tsp_grid_search(inputs, target):
         tsp = TimeSeriesPredictor(n_deep=n_deep, activation=activation, dropout=dropout)
         return tsp._build_model(maxlen=inputs.shape[1],
                                 phase='train')
+
     selector = ModelSelector(KerasRegressor(build_fn=model_build_fn))
     param_grid = {
         'n_deep': [0, 5, 10],

@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 RecurrentLayer = SimpleRNN
 
+
 # enum for different phases
 class Phases:
     def __init__(self):
@@ -118,7 +119,7 @@ class STORNModel(object):
                 gen_input = Dropout(self.dropout)(gen_input)
 
         rnn_gen = RecurrentLayer(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
-                      consume_less='gpu')(
+                                 consume_less='gpu')(
             gen_input)
 
         gen_map = rnn_gen
@@ -318,9 +319,9 @@ class STORNRecognitionModel(object):
                 recogn_input = Dropout(self.dropout)(recogn_input)
 
         recogn_rnn = RecurrentLayer(self.n_hidden_recurrent,
-                         return_sequences=True,
-                         stateful=(phase == Phases.predict),
-                         consume_less='gpu')(
+                                    return_sequences=True,
+                                    stateful=(phase == Phases.predict),
+                                    consume_less='gpu')(
             recogn_input)
 
         recogn_map = recogn_rnn
@@ -335,9 +336,10 @@ class STORNRecognitionModel(object):
 
         # sample z from the distribution in X
         z_t = TimeDistributed(LambdaWithMasking(STORNRecognitionModel.do_sample,
-                                     output_shape=STORNRecognitionModel.sample_output_shape,
-                                     arguments={'batch_size': (None if (phase == Phases.train) else batch_size),
-                                                'dim_size': self.latent_dim}))(recogn_stats)
+                                                output_shape=STORNRecognitionModel.sample_output_shape,
+                                                arguments={
+                                                    'batch_size': (None if (phase == Phases.train) else batch_size),
+                                                    'dim_size': self.latent_dim}))(recogn_stats)
 
         return recogn_stats, x_t, z_t
 
@@ -396,9 +398,9 @@ class STORNPriorModel(object):
     def _build_trending(self, phase):
         prior_input = merge([self.x_tm1, self.z_tm1], mode="concat")
         rnn_prior = RecurrentLayer(self.n_hidden_recurrent,
-                        return_sequences=True,
-                        stateful=(phase == Phases.predict),
-                        consume_less='gpu')(
+                                   return_sequences=True,
+                                   stateful=(phase == Phases.predict),
+                                   consume_less='gpu')(
             prior_input)
         rnn_rec_mu = TimeDistributed(Dense(self.latent_dim, activation='linear'))(rnn_prior)
         rnn_rec_sigma = TimeDistributed(Dense(self.latent_dim, activation="softplus"))(rnn_prior)

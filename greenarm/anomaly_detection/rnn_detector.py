@@ -4,7 +4,6 @@ from keras.models import Model
 from keras.layers import Input, TimeDistributed, Dense, Dropout, Masking, GRU
 from greenarm.util import get_logger
 
-
 logger = get_logger(__name__)
 RecurrentLayer = GRU
 
