@@ -64,14 +64,14 @@ def print_eval(predicted, ground_truth):
                 fp += 1.
     P = (tp / (tp + fp))
     R = (tp / (tp + fn))
-    logger.debug("Total: %s. Positives: %s. Negatives: %s" % (total, ground_truth.sum(), total - ground_truth.sum()))
-    logger.debug("Predicted: Positives: %s. Negatives: %s" % (predicted.sum(), total - predicted.sum()))
-    logger.debug("TP: %s. FP: %s. TN: %s. FN: %s." % (tp, fp, tn, fn))
-    logger.debug("Accuracy: %s" % (corrects / float(total)))
-    logger.debug("Precision: %s" % P)
-    logger.debug("Recall (Sensitivity): %s" % R)
-    logger.debug("TN Rate (Specificity): %s" % (tn / tn + fp))
-    logger.debug("F1: %s" % ((2. * P * R) / (P + R)))
+    logger.info("Total: %s. Positives: %s. Negatives: %s" % (total, ground_truth.sum(), total - ground_truth.sum()))
+    logger.info("Predicted: Positives: %s. Negatives: %s" % (predicted.sum(), total - predicted.sum()))
+    logger.info("TP: %s. FP: %s. TN: %s. FN: %s." % (tp, fp, tn, fn))
+    logger.info("Accuracy: %s" % (corrects / float(total)))
+    logger.info("Precision: %s" % P)
+    logger.info("Recall (Sensitivity): %s" % R)
+    logger.info("TN Rate (Specificity): %s" % (tn / (tn + fp)))
+    logger.info("F1: %s" % ((2. * P * R) / (P + R)))
 
 
 def pad_sequences_3d(sequences, maxlen, return_paddings=False, skip_first_n_dims=0):

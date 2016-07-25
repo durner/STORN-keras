@@ -1,8 +1,9 @@
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+import time
+from keras.callbacks import ModelCheckpoint, EarlyStopping, RemoteMonitor
 from keras.models import Model
 from keras.layers import Input, TimeDistributed, Dense, Dropout, Masking, GRU
 from greenarm.util import get_logger
-import time
+
 
 logger = get_logger(__name__)
 RecurrentLayer = GRU
@@ -28,8 +29,11 @@ class RNNAnomalyDetector(object):
         # Object state
         self.model = None
 
+        # Misc
+        self.monitor = True
+
     def build_model(self, seq_len=None):
-        loss_input = Input(shape=(seq_len, 1))
+        loss_input = Input(shape=(seq_len, 33))
         masked_input = Masking()(loss_input)
 
         # deep feature extraction for the loss
@@ -55,7 +59,7 @@ class RNNAnomalyDetector(object):
         output = Dense(1, activation="sigmoid")(output)
 
         model = Model(input=[loss_input], output=output)
-        model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
+        model.compile(optimizer='sgd', loss='binary_crossentropy', metrics=['acc'])
         return model
 
     def train(self, X, y, validation_split=0.1, max_epochs=100):
@@ -71,12 +75,17 @@ class RNNAnomalyDetector(object):
 
         checkpoint = ModelCheckpoint("best_anomaly_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
         early_stop = EarlyStopping(monitor='val_acc', patience=150, verbose=1)
+
+        callbacks = [checkpoint, early_stop]
+        if self.monitor:
+            monitor = RemoteMonitor(root='http://localhost:9000')
+            callbacks = callbacks + [monitor]
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
                 [X_train], y_train,
                 nb_epoch=max_epochs, validation_data=([X_val], y_val),
-                callbacks=[checkpoint, early_stop]
+                callbacks=callbacks
             )
         except KeyboardInterrupt:
             logger.debug("Training interrupted! Restoring best weights and saving..")

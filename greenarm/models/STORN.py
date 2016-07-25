@@ -18,7 +18,6 @@ logger = get_logger(__name__)
 
 RecurrentLayer = SimpleRNN
 
-
 # enum for different phases
 class Phases:
     def __init__(self):
@@ -310,6 +309,7 @@ class STORNRecognitionModel(object):
 
         # Fix of keras/engine/topology.py required!
         # Otherwise concat with masked and non masked layer returns an error!
+        # recogn_input = Masking()(x_t)
         recogn_input = x_t
 
         for i in range(self.n_deep):
