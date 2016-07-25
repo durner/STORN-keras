@@ -2,7 +2,7 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 from scipy.ndimage import gaussian_filter
-
+from greenarm.models.loss.binary_crossentropy import biased_binary_crossentropy
 from greenarm.util import get_logger
 import time
 import numpy
@@ -19,13 +19,19 @@ class MaxAnomalyDetector(object):
         # Object state
         self.model = None
 
+    bias = 4
+
     @staticmethod
     def build_model(seq_len=1):
         model = Sequential()
         model.add(Dense(output_dim=1, input_shape=(seq_len,)))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
+        model.compile(optimizer='rmsprop', loss=MaxAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
+
+    @staticmethod
+    def biased_binary_crossentropy_wrapper(y_true, y_pred):
+        return biased_binary_crossentropy(MaxAnomalyDetector.bias, y_true, y_pred)
 
     def train(self, X, y, validation_split=0.1, max_epochs=2000):
         n_samples = X.shape[0]
