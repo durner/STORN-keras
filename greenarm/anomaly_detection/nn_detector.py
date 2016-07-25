@@ -46,7 +46,7 @@ class NNAnomalyDetector(object):
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
         y = numpy.reshape(y, (n_samples, 1))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=0.9), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1), axis=-1, arr=X)
 
         if self.model is None:
             self.model = self.build_model(seq_len=seq_len)
@@ -74,7 +74,7 @@ class NNAnomalyDetector(object):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=0.9), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1), axis=-1, arr=X)
         return self.model.predict([X]) > 0.5
 
     def save(self, prefix=None):
