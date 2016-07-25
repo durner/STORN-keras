@@ -59,7 +59,7 @@ class MaxAnomalyDetector(object):
         self.model.load_weights("best_anomaly_max_weights.h5")
         self.save()
 
-    def predict(self, X, sensitivity=0.1):
+    def predict(self, X, sensitivity=0.5):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))

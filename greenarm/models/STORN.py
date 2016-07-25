@@ -16,7 +16,7 @@ from greenarm.util import add_samples_until_divisible, get_logger
 
 logger = get_logger(__name__)
 
-RecurrentLayer = SimpleRNN
+RecurrentLayer = GRU
 
 
 # enum for different phases
