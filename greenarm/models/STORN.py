@@ -240,7 +240,7 @@ class STORNModel(object):
         stats = K.placeholder(ndim=3, dtype="float32")
         get_loss = K.function(inputs=[x, stats], outputs=keras_variational(x, stats))
         loss = get_loss([padded_target, predictions])
-        return predictions[:, :, :data_dim], loss / 18
+        return predictions[:, :, :data_dim], loss
 
     def evaluate_online(self, inputs, ground_truth):
         """
