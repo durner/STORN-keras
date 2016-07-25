@@ -16,6 +16,8 @@ class NNAnomalyDetector(object):
     Using a deep feed forward network to find from the input loss the corresponding anomalies.
     """
 
+    bias = 4
+
     def __init__(self):
         # Object state
         self.model = None
@@ -28,7 +30,7 @@ class NNAnomalyDetector(object):
         model.add(Dropout(0.5))
         model.add(Dense(1024))
         model.add(Activation("relu"))
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.3))
         model.add(Dense(128))
         model.add(Activation("relu"))
         model.add(Dropout(0.3))
@@ -39,7 +41,7 @@ class NNAnomalyDetector(object):
 
     @staticmethod
     def biased_binary_crossentropy_wrapper(y_true, y_pred):
-        return biased_binary_crossentropy(5, y_true, y_pred)
+        return biased_binary_crossentropy(NNAnomalyDetector.bias, y_true, y_pred)
 
     def train(self, X, y, validation_split=0.1, max_epochs=500):
         n_samples = X.shape[0]
