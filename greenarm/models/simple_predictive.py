@@ -5,7 +5,6 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout
 from keras.models import Model
 from keras.wrappers.scikit_learn import KerasRegressor
-
 from greenarm.models.grid_search.keras_grid import ModelSelector
 from greenarm.util import get_logger, add_samples_until_divisible
 
