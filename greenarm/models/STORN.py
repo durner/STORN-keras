@@ -8,14 +8,15 @@ import keras.backend as K
 from keras.callbacks import ModelCheckpoint, EarlyStopping, RemoteMonitor
 from keras.engine import merge
 from keras.models import Model
-from keras.layers import Masking
-from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU
+from keras.layers import Input, TimeDistributed, Dense, Dropout, GRU, SimpleRNN
 from greenarm.models.keras_fix.lambdawithmasking import LambdaWithMasking
 from greenarm.models.loss.variational import keras_variational
 from greenarm.models.sampling.sampling import sample_gauss
 from greenarm.util import add_samples_until_divisible, get_logger
 
 logger = get_logger(__name__)
+
+RecurrentLayer = SimpleRNN
 
 
 # enum for different phases
@@ -117,7 +118,7 @@ class STORNModel(object):
             if self.dropout != 0:
                 gen_input = Dropout(self.dropout)(gen_input)
 
-        rnn_gen = GRU(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
+        rnn_gen = RecurrentLayer(self.n_hidden_recurrent, return_sequences=True, stateful=(phase == Phases.predict),
                       consume_less='gpu')(
             gen_input)
 
@@ -316,7 +317,7 @@ class STORNRecognitionModel(object):
             if self.dropout != 0.0:
                 recogn_input = Dropout(self.dropout)(recogn_input)
 
-        recogn_rnn = GRU(self.n_hidden_recurrent,
+        recogn_rnn = RecurrentLayer(self.n_hidden_recurrent,
                          return_sequences=True,
                          stateful=(phase == Phases.predict),
                          consume_less='gpu')(
@@ -394,7 +395,7 @@ class STORNPriorModel(object):
 
     def _build_trending(self, phase):
         prior_input = merge([self.x_tm1, self.z_tm1], mode="concat")
-        rnn_prior = GRU(self.n_hidden_recurrent,
+        rnn_prior = RecurrentLayer(self.n_hidden_recurrent,
                         return_sequences=True,
                         stateful=(phase == Phases.predict),
                         consume_less='gpu')(
