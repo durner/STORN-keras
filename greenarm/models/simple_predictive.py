@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.callbacks import ModelCheckpoint, EarlyStopping, RemoteMonitor
 from keras.layers import TimeDistributed, Dense, Input, GRU, Masking, Dropout
 from keras.models import Model
 from keras.wrappers.scikit_learn import KerasRegressor
@@ -15,7 +15,7 @@ RecurrentLayer = GRU
 
 class TimeSeriesPredictor(object):
     def __init__(self, n_deep_dense=5, n_deep_dense_input=3, n_deep_recurrent=4, num_hidden_recurrent=128,
-                 num_hidden_dense=32, dropout=0, activation="sigmoid"):
+                 num_hidden_dense=32, dropout=0, activation="sigmoid", monitor=False):
         self.n_deep_dense = n_deep_dense
         self.n_deep_dense_input = n_deep_dense_input
         self.n_deep_recurrent = n_deep_recurrent
@@ -27,6 +27,9 @@ class TimeSeriesPredictor(object):
         self.train_model = None
         self.predict_model = None
         self._weights_updated = False
+
+        # Misc
+        self.monitor = monitor
 
     def get_params(self, deep=True):
         return {
@@ -105,9 +108,15 @@ class TimeSeriesPredictor(object):
 
         checkpoint = ModelCheckpoint("best_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
         early_stop = EarlyStopping(monitor='val_loss', patience=150, verbose=1)
+
+        callbacks = [checkpoint, early_stop]
+        if self.monitor:
+            monitor = RemoteMonitor(root='http://localhost:9000')
+            callbacks = callbacks + [monitor]
+
         try:
             self.train_model.fit(
-                X, y, nb_epoch=max_epochs, validation_data=(X_val, y_val), callbacks=[checkpoint, early_stop]
+                X, y, nb_epoch=max_epochs, validation_data=(X_val, y_val), callbacks=callbacks
             )
 
         except KeyboardInterrupt:
