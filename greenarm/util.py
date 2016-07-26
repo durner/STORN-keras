@@ -92,3 +92,41 @@ def pad_sequences_3d(sequences, maxlen, return_paddings=False, skip_first_n_dims
         return data, paddings
 
     return data
+
+
+dimension_names = ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_w1', 'left_w2']
+
+
+def plot_storn_output(plot, error, ground_truth, prediction, title="STORN output", legend=False):
+    plot.set_title(title)
+    plot.set_ylim([-4, 4])
+
+    # plot the error curve
+    plot.plot(error, label='Loss', color='red')
+
+    # plot the ground truths and predictions
+    for i in range(ground_truth.shape[-1]):
+        plot.plot(ground_truth[:, i],
+                  label=dimension_names[i])
+        plot.plot(prediction[:, i], color="grey", label='prediction')
+
+    if legend:
+        plot.legend(loc="lower right")
+
+
+def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_anomal,
+              threshold, title="Full plot"):
+    # plot the STORN output first
+    plot_storn_output(plot, error, ground_truth, prediction, title)
+
+    # plot anomalies
+    for anomaly in original_anomal:
+        plot.axvline(anomaly, color='m')
+    for anomaly in detected_anomal:
+        plot.axvline(anomaly, color='g')
+
+    # plot anomaly threshold
+    plot.axhline(y=threshold, color='m', ls='dashed')
+
+    # put a legend
+    plot.legend(loc="lower right")
