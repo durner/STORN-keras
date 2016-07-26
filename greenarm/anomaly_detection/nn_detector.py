@@ -16,7 +16,8 @@ class NNAnomalyDetector(object):
     Using a deep feed forward network to find from the input loss the corresponding anomalies.
     """
 
-    bias = 4
+    # bias positives that were predicted negative errors more to increase recall
+    bias = 1.5
 
     def __init__(self):
         # Object state
@@ -25,18 +26,12 @@ class NNAnomalyDetector(object):
     @staticmethod
     def build_model(seq_len=None):
         model = Sequential()
-        model.add(Dense(1536, input_shape=(seq_len,)))
+        model.add(Dense(128, input_shape=(seq_len,)))
         model.add(Activation("relu"))
         model.add(Dropout(0.5))
-        model.add(Dense(1024))
-        model.add(Activation("relu"))
-        model.add(Dropout(0.3))
-        model.add(Dense(128))
-        model.add(Activation("relu"))
-        model.add(Dropout(0.3))
         model.add(Dense(output_dim=1))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='sgd', loss=NNAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
+        model.compile(optimizer='adadelta', loss=NNAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
 
     @staticmethod
@@ -48,7 +43,7 @@ class NNAnomalyDetector(object):
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
         y = numpy.reshape(y, (n_samples, 1))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
 
         if self.model is None:
             self.model = self.build_model(seq_len=seq_len)
@@ -57,8 +52,8 @@ class NNAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_nn_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_nn_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor='val_acc', patience=100, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
@@ -76,7 +71,7 @@ class NNAnomalyDetector(object):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
         return self.model.predict([X]) > 0.5
 
     def save(self, prefix=None):

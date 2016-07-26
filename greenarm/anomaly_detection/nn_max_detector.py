@@ -19,14 +19,15 @@ class MaxAnomalyDetector(object):
         # Object state
         self.model = None
 
-    bias = 4
+    # bias positives that were predicted negative errors more to increase recall
+    bias = 0.8
 
     @staticmethod
     def build_model(seq_len=1):
         model = Sequential()
         model.add(Dense(output_dim=1, input_shape=(seq_len,)))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='rmsprop', loss=MaxAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
+        model.compile(optimizer='sgd', loss=MaxAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
 
     @staticmethod
@@ -38,7 +39,7 @@ class MaxAnomalyDetector(object):
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
         y = numpy.reshape(y, (n_samples, 1))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.5), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
         X = numpy.max(X, axis=-1)
 
         if self.model is None:
@@ -48,8 +49,8 @@ class MaxAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_max_weights.h5", monitor='val_loss', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_loss', patience=300, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_max_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor='val_acc', patience=300, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
@@ -67,7 +68,7 @@ class MaxAnomalyDetector(object):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len))
-        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.5), axis=-1, arr=X)
+        X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
         X = numpy.max(X, axis=-1)
         return self.model.predict([X]) > sensitivity
 
