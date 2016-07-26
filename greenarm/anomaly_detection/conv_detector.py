@@ -17,7 +17,7 @@ class CovNetAnomalyDetector(object):
     """
 
     # bias positives that were predicted negative errors more to increase recall
-    bias = 1.0
+    bias = 1.2
 
     def __init__(self):
         # Object state
@@ -28,10 +28,12 @@ class CovNetAnomalyDetector(object):
         model = Sequential()
         model.add(Convolution1D(64, 4, border_mode='same', input_shape=(seq_len, 1)))
         model.add(Activation("relu"))
+        model.add(Dropout(0.5))
         model.add(MaxPooling1D(pool_length=2, stride=None, border_mode='valid'))
         model.add(Flatten())
-        model.add(Dense(64))
+        model.add(Dense(128))
         model.add(Activation("relu"))
+        model.add(Dropout(0.5))
         model.add(Dense(output_dim=1))
         model.add(Activation("sigmoid"))
         model.compile(optimizer='rmsprop', loss=CovNetAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
@@ -55,7 +57,7 @@ class CovNetAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_nn_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_cnn_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
         early_stop = EarlyStopping(monitor='val_acc', patience=100, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
@@ -67,7 +69,7 @@ class CovNetAnomalyDetector(object):
         except KeyboardInterrupt:
             logger.debug("Training interrupted! Restoring best weights and saving..")
 
-        self.model.load_weights("best_anomaly_nn_weights.h5")
+        self.model.load_weights("best_anomaly_cnn_weights.h5")
         self.save()
 
     def predict(self, X):
@@ -79,7 +81,7 @@ class CovNetAnomalyDetector(object):
 
     def save(self, prefix=None):
         if prefix is None:
-            prefix = "saved_models/NNAnomalyDetector_%s.model" % int(time.time())
+            prefix = "saved_models/ConvAnomalyDetector_%s.model" % int(time.time())
 
         logger.debug("Saving model to %s" % prefix)
 
