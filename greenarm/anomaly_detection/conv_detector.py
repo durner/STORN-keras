@@ -1,6 +1,6 @@
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.models import Sequential
-from keras.layers import Dense, Activation, Dropout
+from keras.layers import Dense, Activation, Dropout, Convolution1D, MaxPooling1D, Flatten
 from scipy.ndimage import gaussian_filter
 from greenarm.models.loss.binary_crossentropy import biased_binary_crossentropy
 from greenarm.util import get_logger
@@ -10,14 +10,14 @@ import numpy
 logger = get_logger(__name__)
 
 
-class NNAnomalyDetector(object):
+class CovNetAnomalyDetector(object):
     """
     The NN Anomaly Detector is trained on a 1 dimensional array of the loss value of the STORN model.
     Using a deep feed forward network to find from the input loss the corresponding anomalies.
     """
 
     # bias positives that were predicted negative errors more to increase recall
-    bias = 1.5
+    bias = 1.0
 
     def __init__(self):
         # Object state
@@ -26,22 +26,25 @@ class NNAnomalyDetector(object):
     @staticmethod
     def build_model(seq_len=None):
         model = Sequential()
-        model.add(Dense(128, input_shape=(seq_len,)))
+        model.add(Convolution1D(64, 4, border_mode='same', input_shape=(seq_len, 1)))
         model.add(Activation("relu"))
-        model.add(Dropout(0.5))
+        model.add(MaxPooling1D(pool_length=2, stride=None, border_mode='valid'))
+        model.add(Flatten())
+        model.add(Dense(64))
+        model.add(Activation("relu"))
         model.add(Dense(output_dim=1))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='adadelta', loss=NNAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
+        model.compile(optimizer='rmsprop', loss=CovNetAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
 
     @staticmethod
     def biased_binary_crossentropy_wrapper(y_true, y_pred):
-        return biased_binary_crossentropy(NNAnomalyDetector.bias, y_true, y_pred)
+        return biased_binary_crossentropy(CovNetAnomalyDetector.bias, y_true, y_pred)
 
     def train(self, X, y, validation_split=0.1, max_epochs=500):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
-        X = numpy.reshape(X, (n_samples, seq_len))
+        X = numpy.reshape(X, (n_samples, seq_len, 1))
         y = numpy.reshape(y, (n_samples, 1))
         X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
 
@@ -70,7 +73,7 @@ class NNAnomalyDetector(object):
     def predict(self, X):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
-        X = numpy.reshape(X, (n_samples, seq_len))
+        X = numpy.reshape(X, (n_samples, seq_len, 1))
         X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
         return self.model.predict([X]) > 0.5
 
