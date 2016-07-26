@@ -15,24 +15,25 @@ class MaxAnomalyDetector(object):
     The Max Anomaly Detector is trained on a 1 dimensional array of the loss value of the STORN model.
     """
 
-    def __init__(self):
+    def __init__(self, bias=0.8, optimizer='sgd', monitor='val_acc'):
         # Object state
         self.model = None
+        # bias positives that were predicted negative errors more to increase recall
+        self.bias = bias
+        # optimizer that shall be used
+        self.optimizer = optimizer
+        # monitor that shall be used
+        self.monitor = monitor
 
-    # bias positives that were predicted negative errors more to increase recall
-    bias = 0.8
-
-    @staticmethod
-    def build_model(seq_len=1):
+    def build_model(self, seq_len=1):
         model = Sequential()
         model.add(Dense(output_dim=1, input_shape=(seq_len,)))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='sgd', loss=MaxAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
+        model.compile(optimizer=self.optimizer, loss=self.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
 
-    @staticmethod
-    def biased_binary_crossentropy_wrapper(y_true, y_pred):
-        return biased_binary_crossentropy(MaxAnomalyDetector.bias, y_true, y_pred)
+    def biased_binary_crossentropy_wrapper(self, y_true, y_pred):
+        return biased_binary_crossentropy(self.bias, y_true, y_pred)
 
     def train(self, X, y, validation_split=0.1, max_epochs=2000):
         n_samples = X.shape[0]
@@ -49,8 +50,8 @@ class MaxAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_max_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_acc', patience=300, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_max_weights.h5", monitor=self.monitor, save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor=self.monitor, patience=300, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
