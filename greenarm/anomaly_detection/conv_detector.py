@@ -12,19 +12,21 @@ logger = get_logger(__name__)
 
 class CovNetAnomalyDetector(object):
     """
-    The NN Anomaly Detector is trained on a 1 dimensional array of the loss value of the STORN model.
-    Using a deep feed forward network to find from the input loss the corresponding anomalies.
+    The Conv Net Anomaly Detector is trained on a 1 dimensional array of the loss value of the STORN model.
+    Using a deep convolutional network to find from the input loss the corresponding anomalies.
     """
 
-    # bias positives that were predicted negative errors more to increase recall
-    bias = 1.2
-
-    def __init__(self):
+    def __init__(self, bias=1.2, optimizer='rmsprop', monitor='val_acc'):
         # Object state
         self.model = None
+        # bias positives that were predicted negative errors more to increase recall
+        self.bias = bias
+        # optimizer that shall be used
+        self.optimizer = optimizer
+        # monitor that shall be used
+        self.monitor = monitor
 
-    @staticmethod
-    def build_model(seq_len=None):
+    def build_model(self, seq_len=None):
         model = Sequential()
         model.add(Convolution1D(64, 4, border_mode='same', input_shape=(seq_len, 1)))
         model.add(Activation("relu"))
@@ -36,12 +38,11 @@ class CovNetAnomalyDetector(object):
         model.add(Dropout(0.5))
         model.add(Dense(output_dim=1))
         model.add(Activation("sigmoid"))
-        model.compile(optimizer='rmsprop', loss=CovNetAnomalyDetector.biased_binary_crossentropy_wrapper, metrics=['acc'])
+        model.compile(optimizer=self.optimizer, loss=self.biased_binary_crossentropy_wrapper, metrics=['acc'])
         return model
 
-    @staticmethod
-    def biased_binary_crossentropy_wrapper(y_true, y_pred):
-        return biased_binary_crossentropy(CovNetAnomalyDetector.bias, y_true, y_pred)
+    def biased_binary_crossentropy_wrapper(self, y_true, y_pred):
+        return biased_binary_crossentropy(self.bias, y_true, y_pred)
 
     def train(self, X, y, validation_split=0.1, max_epochs=500):
         n_samples = X.shape[0]
@@ -57,8 +58,8 @@ class CovNetAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_cnn_weights.h5", monitor='val_acc', save_best_only=True, verbose=1)
-        early_stop = EarlyStopping(monitor='val_acc', patience=100, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_cnn_weights.h5", monitor=self.monitor, save_best_only=True, verbose=1)
+        early_stop = EarlyStopping(monitor=self.monitor, patience=100, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
             self.model.fit(
