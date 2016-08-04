@@ -1,6 +1,8 @@
 import logging
 import numpy as np
 import random
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
 
 logging.basicConfig(format="%(asctime)s %(levelname)-8s %(name)-18s: %(message)s", level=logging.DEBUG)
 
@@ -142,3 +144,23 @@ def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_a
 
     # plot anomaly threshold
     plot.axhline(y=threshold, color='blue', ls='dashed')
+
+
+def plot_ROC_curve(target, pred_scores):
+    """
+    Plots an ROC curve given a vector of binary targets and predicted confidence scores.
+    :param target: vector of 0, 1 target labels
+    :param pred_scores: the predicted probability scores, or confidence scores
+    """
+    fp_rate, tp_rate, _ = roc_curve(target, pred_scores)
+    roc_auc = auc(fp_rate, tp_rate)
+    plt.figure()
+    plt.plot(fp_rate, tp_rate, label='ROC curve (AUC = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FP Rate')
+    plt.ylabel('TP Rate')
+    plt.title('ROC curve')
+    plt.legend(loc="lower right")
+    plt.show()
