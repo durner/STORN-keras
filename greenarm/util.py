@@ -63,12 +63,20 @@ def print_eval(predicted, ground_truth):
                 fn += 1.
             else:
                 fp += 1.
-    P = (tp / (tp + fp))
-    R = (tp / (tp + fn))
+
     logger.info("Total: %s. Positives: %s. Negatives: %s" % (total, ground_truth.sum(), total - ground_truth.sum()))
     logger.info("Predicted: Positives: %s. Negatives: %s" % (predicted.sum(), total - predicted.sum()))
-    logger.info("TP: %s. FP: %s. TN: %s. FN: %s." % (tp, fp, tn, fn))
     logger.info("Accuracy: %s" % (corrects / float(total)))
+
+    print_eval_from_counts(tp, fp, tn, fn)
+
+
+def print_eval_from_counts(tp, fp, tn, fn):
+    P = (tp / (tp + fp))
+    R = (tp / (tp + fn))
+
+    logger.info("TP: %s. FP: %s. TN: %s. FN: %s." % (tp, fp, tn, fn))
+
     logger.info("Precision: %s" % P)
     logger.info("Recall (Sensitivity): %s" % R)
     logger.info("TN Rate (Specificity): %s" % (tn / (tn + fp)))
