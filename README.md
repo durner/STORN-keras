@@ -1,4 +1,4 @@
-## Baxter Collision Data - Group Greenarm
+### Baxter Collision Data - Group Greenarm
 
 Required packages:
  - keras >= 1.0.6
@@ -9,9 +9,11 @@ Required packages:
  - hdf5 = 1.8.16
  - [hualos](https://github.com/fchollet/hualos) (optional monitoring)
 
+## Please replace this code snippet in the `keras` library!
+Keras does not currently have proper support for Masking and merged layer outputs.
 
- Changes for Masked Layer Merge building on top of keras 1.0.6
- file: keras/engine/topology.py, method: compute_mask, line: 1349
+Changes for Masked Layer Merge building on top of keras 1.0.6
+file: keras/engine/topology.py, method: compute_mask, line: 1349
 
  ```{py}
     def compute_mask(self, inputs, mask=None):
