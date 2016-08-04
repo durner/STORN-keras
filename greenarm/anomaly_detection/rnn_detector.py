@@ -91,9 +91,12 @@ class RNNAnomalyDetector(object):
 
         self.model.load_weights("best_anomaly_weights.h5")
         self.save()
+        
+    def score(self, X):
+        return self.model.predict([X])
 
     def predict(self, X):
-        return self.model.predict([X]) > 0.5
+        return self.score(X) > 0.5
 
     def save(self, prefix=None):
         if prefix is None:

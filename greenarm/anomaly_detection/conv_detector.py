@@ -58,7 +58,8 @@ class CovNetAnomalyDetector(object):
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        checkpoint = ModelCheckpoint("best_anomaly_cnn_weights.h5", monitor=self.monitor, save_best_only=True, verbose=1)
+        checkpoint = ModelCheckpoint("best_anomaly_cnn_weights.h5", monitor=self.monitor, save_best_only=True,
+                                     verbose=1)
         early_stop = EarlyStopping(monitor=self.monitor, patience=100, verbose=1)
         try:
             logger.debug("Beginning anomaly detector training..")
@@ -73,12 +74,15 @@ class CovNetAnomalyDetector(object):
         self.model.load_weights("best_anomaly_cnn_weights.h5")
         self.save()
 
-    def predict(self, X):
+    def score(self, X):
         n_samples = X.shape[0]
         seq_len = X.shape[1]
         X = numpy.reshape(X, (n_samples, seq_len, 1))
         X = numpy.apply_along_axis(lambda x: gaussian_filter(x, sigma=1.), axis=-1, arr=X)
-        return self.model.predict([X]) > 0.5
+        return self.model.predict([X])
+
+    def predict(self, X):
+        return self.score(X) > 0.5
 
     def save(self, prefix=None):
         if prefix is None:
