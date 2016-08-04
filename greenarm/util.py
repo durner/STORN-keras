@@ -95,38 +95,50 @@ def pad_sequences_3d(sequences, maxlen, return_paddings=False, skip_first_n_dims
 
 
 dimension_names = ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_w1', 'left_w2']
+cols = ["yellow", "orange", "purple", "black", "green", "blue", "cyan"]
 
 
-def plot_storn_output(plot, error, ground_truth, prediction, title="STORN output", legend=False):
-    plot.set_title(title)
+def plot_storn_output(plot, ground_truth, prediction=None, alpha_gt=1, title="STORN output",
+                      flip_color=False):
+    plot.set_title(title, fontsize=30)
     plot.set_ylim([-4, 4])
-
-    # plot the error curve
-    plot.plot(error, label='Loss', color='red')
 
     # plot the ground truths and predictions
     for i in range(ground_truth.shape[-1]):
-        plot.plot(ground_truth[:, i],
-                  label=dimension_names[i])
-        plot.plot(prediction[:, i], color="grey", label='prediction')
+        if flip_color:
+            col1 = "grey"
+            col2 = cols[i]
+        else:
+            col1 = cols[i]
+            col2 = "grey"
 
-    if legend:
-        plot.legend(loc="lower right")
+        plot.plot(ground_truth[:, i],
+                  label=dimension_names[i], linewidth=4.0, alpha=alpha_gt, color=col1)
+        if prediction is not None:
+            plot.plot(prediction[:, i], color=col2, label='prediction', linewidth=3.0)
+
+    plot.legend(loc="lower left", prop={'size': 30})
+
+
+def plot_storn_error(plot, error):
+    plot.plot(error, label="STORN loss", color="red", linewidth=3.0)
+    plot.legend(loc="lower left", prop={'size': 30})
 
 
 def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_anomal,
-              threshold, title="Full plot"):
-    # plot the STORN output first
-    plot_storn_output(plot, error, ground_truth, prediction, title)
-
+              threshold, title="Full plot", alpha_gt=1):
     # plot anomalies
     for anomaly in original_anomal:
-        plot.axvline(anomaly, color='m')
+        plot.axvline(anomaly, color='m', linewidth=4.0)
+        plot.axvspan(anomaly, anomaly + 40, facecolor='grey', alpha=0.2)
     for anomaly in detected_anomal:
-        plot.axvline(anomaly, color='g')
+        plot.axvline(anomaly, color='g', linewidth=4.0)
+
+    # plot the STORN output first
+    plot_storn_output(plot, ground_truth, title=title, alpha_gt=alpha_gt)
+
+    # plot the error
+    plot_storn_error(plot, error)
 
     # plot anomaly threshold
-    plot.axhline(y=threshold, color='m', ls='dashed')
-
-    # put a legend
-    plot.legend(loc="lower right")
+    plot.axhline(y=threshold, color='blue', ls='dashed')
