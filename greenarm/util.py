@@ -2,7 +2,6 @@ import logging
 import numpy as np
 import random
 from sklearn.metrics import roc_curve, auc
-import pylab as plt
 
 logging.basicConfig(format="%(asctime)s %(levelname)-8s %(name)-18s: %(message)s", level=logging.DEBUG)
 
@@ -154,7 +153,7 @@ def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_a
     plot.axhline(y=threshold, color='blue', ls='dashed')
 
 
-def plot_ROC_curve(target, pred_scores):
+def plot_ROC_curve(plot, target, pred_scores, name):
     """
     Plots an ROC curve given a vector of binary targets and predicted confidence scores.
     :param target: vector of 0, 1 target labels
@@ -162,13 +161,12 @@ def plot_ROC_curve(target, pred_scores):
     """
     fp_rate, tp_rate, _ = roc_curve(target, pred_scores)
     roc_auc = auc(fp_rate, tp_rate)
-    plt.figure()
-    plt.plot(fp_rate, tp_rate, label='ROC curve (AUC = %0.4f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('FP Rate')
-    plt.ylabel('TP Rate')
-    plt.title('ROC curve')
-    plt.legend(loc="lower right")
-    plt.show()
+
+    plot.plot(fp_rate, tp_rate, label='%s, (AUC = %0.4f)' % (name, roc_auc))
+    plot.plot([0, 1], [0, 1], 'k--')
+    plot.xlim([0.0, 1.0])
+    plot.ylim([0.0, 1.05])
+    plot.xlabel('FP Rate')
+    plot.ylabel('TP Rate')
+    plot.title('ROC curves')
+    plot.legend(loc="lower right")
