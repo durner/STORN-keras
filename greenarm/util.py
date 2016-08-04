@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import random
 from sklearn.metrics import roc_curve, auc
-import matplotlib.pyplot as plt
+import pylab as plt
 
 logging.basicConfig(format="%(asctime)s %(levelname)-8s %(name)-18s: %(message)s", level=logging.DEBUG)
 
@@ -155,7 +155,7 @@ def plot_ROC_curve(target, pred_scores):
     fp_rate, tp_rate, _ = roc_curve(target, pred_scores)
     roc_auc = auc(fp_rate, tp_rate)
     plt.figure()
-    plt.plot(fp_rate, tp_rate, label='ROC curve (AUC = %0.2f)' % roc_auc)
+    plt.plot(fp_rate, tp_rate, label='ROC curve (AUC = %0.4f)' % roc_auc)
     plt.plot([0, 1], [0, 1], 'k--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
