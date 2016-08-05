@@ -54,6 +54,7 @@ file: keras/engine/topology.py, method: compute_mask, line: 1349
 
 ### Running all experiments
 * Place the 3 folders `anomal`, `normal1` and `normal2` directly under `data` to let our model pickup the Baxter collision dataset.
+* Run the file `run_torque.py` to generate the improved anomaly labels. Without those, the functions in `main.py` will not run.
 * In the `main.py` file, there are a number of callable functions (commented out in the end) which are there for running different experiments:
     * `run_TS_evaluator()` will run the simple Timeseries Predictor, producing plots of the fit and the loss value in the `plots` directory.
     * `run_STORN_evaluator(use_anomalies=True)` will do the same for STORN. Set `use_anomalies` to `False` to run STORN on normal data, `True` makes it run on anomalous data. Both calls will print how many sequences were detected as anomalous.
