@@ -54,14 +54,14 @@ class MaxAnomalyDetector(object):
                                      verbose=1)
         early_stop = EarlyStopping(monitor=self.monitor, patience=300, verbose=1)
         try:
-            logger.debug("Beginning anomaly detector training..")
+            logger.info("Beginning anomaly detector training..")
             self.model.fit(
                 [X_train], y_train,
                 nb_epoch=max_epochs, validation_data=([X_val], y_val),
                 callbacks=[checkpoint, early_stop]
             )
         except KeyboardInterrupt:
-            logger.debug("Training interrupted! Restoring best weights and saving..")
+            logger.info("Training interrupted! Restoring best weights and saving..")
 
         self.model.load_weights("best_anomaly_max_weights.h5")
         self.save()
@@ -81,7 +81,7 @@ class MaxAnomalyDetector(object):
         if prefix is None:
             prefix = "saved_models/MaxAnomalyDetector_%s.model" % int(time.time())
 
-        logger.debug("Saving model to %s" % prefix)
+        logger.info("Saving model to %s" % prefix)
 
         with open(prefix + ".json", "w") as of:
             of.write(self.model.to_json())

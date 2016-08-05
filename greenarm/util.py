@@ -3,7 +3,7 @@ import numpy as np
 import random
 from sklearn.metrics import roc_curve, auc
 
-logging.basicConfig(format="%(asctime)s %(levelname)-8s %(name)-18s: %(message)s", level=logging.DEBUG)
+logging.basicConfig(format="%(asctime)s %(levelname)-8s %(name)-18s: %(message)s", level=logging.INFO)
 
 
 def get_logger(name):

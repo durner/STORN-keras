@@ -120,7 +120,7 @@ class TimeSeriesPredictor(object):
             )
 
         except KeyboardInterrupt:
-            logger.debug("Trianing interrupted! Restoring best weights and saving..")
+            logger.info("Training interrupted! Restoring best weights and saving..")
 
         self.train_model.load_weights("best_weights.h5")
         self._weights_updated = True
@@ -167,7 +167,7 @@ class TimeSeriesPredictor(object):
         if prefix is None:
             prefix = "saved_models/TimeSeriesPredictor_%s.model" % int(time.time())
 
-        logger.debug("Saving model to %s" % prefix)
+        logger.info("Saving model to %s" % prefix)
 
         with open(prefix + ".json", "w") as of:
             of.write(self.train_model.to_json())

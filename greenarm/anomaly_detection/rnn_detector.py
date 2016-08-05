@@ -80,14 +80,14 @@ class RNNAnomalyDetector(object):
             monitor = RemoteMonitor(root='http://localhost:9000')
             callbacks = callbacks + [monitor]
         try:
-            logger.debug("Beginning anomaly detector training..")
+            logger.info("Beginning anomaly detector training..")
             self.model.fit(
                 [X_train], y_train,
                 nb_epoch=max_epochs, validation_data=([X_val], y_val),
                 callbacks=callbacks
             )
         except KeyboardInterrupt:
-            logger.debug("Training interrupted! Restoring best weights and saving..")
+            logger.info("Training interrupted! Restoring best weights and saving..")
 
         self.model.load_weights("best_anomaly_weights.h5")
         self.save()
@@ -102,4 +102,4 @@ class RNNAnomalyDetector(object):
         if prefix is None:
             prefix = "saved_models/RNNAnomalyDetector_%s.model" % int(time.time())
 
-        logger.debug("Saving model to %s" % prefix)
+        logger.info("Saving model to %s" % prefix)

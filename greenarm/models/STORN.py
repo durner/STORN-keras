@@ -190,7 +190,7 @@ class STORNModel(object):
             self.train_model.fit(train_input, padded_target, validation_data=(valid_input, [padded_valid_target]),
                                  callbacks=callbacks, nb_epoch=max_epochs)
         except KeyboardInterrupt:
-            logger.debug("Training interrupted! Restoring best weights and saving..")
+            logger.info("Training interrupted! Restoring best weights and saving..")
 
         self.train_model.load_weights("best_storn_weights.h5")
         self._weights_updated = True
@@ -259,7 +259,7 @@ class STORNModel(object):
         if prefix is None:
             prefix = "saved_models/STORN_%s.model" % int(time.time())
 
-        logger.debug("Saving model to %s" % prefix)
+        logger.info("Saving model to %s" % prefix)
 
         # with codecs.open(prefix + ".json", "w", "UTF-8") as of:
         #     of.write(self.train_model.to_json())
