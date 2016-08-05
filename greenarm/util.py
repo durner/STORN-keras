@@ -107,7 +107,7 @@ dimension_names = ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_
 cols = ["yellow", "orange", "purple", "black", "green", "blue", "cyan"]
 
 
-def plot_storn_output(plot, ground_truth, prediction=None, alpha_gt=1, title="STORN output",
+def plot_model_output(plot, ground_truth, title="Model output", prediction=None, alpha_gt=1,
                       flip_color=False):
     plot.set_title(title, fontsize=30)
     plot.set_ylim([-4, 4])
@@ -129,13 +129,13 @@ def plot_storn_output(plot, ground_truth, prediction=None, alpha_gt=1, title="ST
     plot.legend(loc="lower left", prop={'size': 30})
 
 
-def plot_storn_error(plot, error):
-    plot.plot(error, label="STORN loss", color="red", linewidth=3.0)
+def plot_model_error(plot, error, label="Model loss"):
+    plot.plot(error, label=label, color="red", linewidth=3.0)
     plot.legend(loc="lower left", prop={'size': 30})
 
 
 def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_anomal,
-              threshold, title="Full plot", alpha_gt=1):
+              threshold, title="Full plot", alpha_gt=1, loss_label="Model loss"):
     # plot anomalies
     for anomaly in original_anomal:
         plot.axvline(anomaly, color='m', linewidth=4.0)
@@ -144,10 +144,10 @@ def plot_full(plot, error, ground_truth, prediction, original_anomal, detected_a
         plot.axvline(anomaly, color='g', linewidth=4.0)
 
     # plot the STORN output first
-    plot_storn_output(plot, ground_truth, title=title, alpha_gt=alpha_gt)
+    plot_model_output(plot, ground_truth, title=title, alpha_gt=alpha_gt)
 
     # plot the error
-    plot_storn_error(plot, error)
+    plot_model_error(plot, error, label=loss_label)
 
     # plot anomaly threshold
     plot.axhline(y=threshold, color='blue', ls='dashed')
