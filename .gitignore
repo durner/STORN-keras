@@ -1,12 +1,7 @@
 evaluation_saveme.png
 anormal.png
-greenarm/data_experiments/modified_anomalies.json
 
 # ignore data
-data/anomal
-data/normal1
-data/normal2
-data/README.txt
 
 # Created by https://www.gitignore.io/api/python,pycharm,linux,windows,osx
 
@@ -224,7 +219,3 @@ evaluation_saveme.png
 normal.png
 greenarm/data_experiments/torque.png
 greenarm/data_experiments/torque*.png
-node_modules/
-node_modules/
-data/
-papers/

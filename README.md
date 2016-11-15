@@ -1,6 +1,8 @@
-### Baxter Collision Data - Group Greenarm
+# STORN implementation for keras
 
-Required packages:
+The implementation can be found in greenarm/models/STORN.py!
+
+### Required packages
  - keras >= 1.0.6
  - theano >= 0.8.2
  - numpy >= 1.11.0
@@ -51,18 +53,3 @@ file: keras/engine/topology.py, method: compute_mask, line: 1349
             # this should have been caught earlier
             raise Exception('Invalid merge mode: {}'.format(self.mode))
  ```
-
-### Running all experiments
-* Place the 3 folders `anomal`, `normal1` and `normal2` directly under `data` to let our model pickup the Baxter collision dataset.
-* Run the file `run_torque.py` to generate the improved anomaly labels. Without those, the functions in `main.py` will not run.
-* In the `main.py` file, there are a number of callable functions (commented out in the end) which are there for running different experiments:
-    * `run_TS_evaluator()` will run the simple Timeseries Predictor, producing plots of the fit and the loss value in the `plots` directory.
-    * `run_STORN_evaluator(use_anomalies=True)` will do the same for STORN. Set `use_anomalies` to `False` to run STORN on normal data, `True` makes it run on anomalous data. Both calls will print how many sequences were detected as anomalous.
-    * `max_detection_STORN()` will run the Max Logistic Regression anomaly detection classifier on the STORN loss. Prints a confusion matrix.
-    * `max_detection_tsp()` does the same for the Timeseries Predictor.
-    * `conv_detection_storn()` will run the ConvNet anomaly detection classifier on the STORN loss. Also prints a confusion matrix.
-    * `create_coarse_ROC_plot()` will create a ROC diagram for the above 3 experiments. The diagram is saved under `plots`.
-    * The two `run_fine_grained_evaluation(...)` calls run the fine-grained detection experiments with the two heuristic intervals as described in our report.
-
-Please be patient when running the functions in `main.py`, as the STORN model is always recompiled in between calls.
-Currently the functions in main use already trained model weights that we have saved for STORN and the Timeseries predictor. If you want to train e.g. STORN again before running an experiment, just pass an argument `train=True` to any of the above functions. Keep in mind STORN needs very long time to train (hours).
