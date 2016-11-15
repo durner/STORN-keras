@@ -224,3 +224,7 @@ evaluation_saveme.png
 normal.png
 greenarm/data_experiments/torque.png
 greenarm/data_experiments/torque*.png
+node_modules/
+node_modules/
+data/
+papers/
